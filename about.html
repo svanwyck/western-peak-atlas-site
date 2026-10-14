@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>About US Peak Atlas</title>
+<style>
+  :root { --ink: #221c12; --ink-2: #5c5340; --bg: #faf6ea; --link: #1f5fae; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ink: #ece6d6; --ink-2: #b9b09a; --bg: #1c1914; --link: #8cb8ff; } }
+  :root[data-theme="dark"] { --ink: #ece6d6; --ink-2: #b9b09a; --bg: #1c1914; --link: #8cb8ff; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 680px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 16px; margin: 24px 0 6px; }
+  p, li { color: var(--ink); } .muted, .about-credits { color: var(--ink-2); } a { color: var(--link); }
+  .about-risk { color: #b3261e; font-weight: 700; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .about-risk { color: #ff8a80; } }
+  :root[data-theme="dark"] .about-risk { color: #ff8a80; }
+  .about-warn { border-left: 4px solid #9a5b13; padding: 8px 10px; background: color-mix(in srgb, #9a5b13 12%, transparent); border-radius: 4px; }
+</style></head><body><main>
+<h1>About US Peak Atlas</h1>
+<p class="muted">Built 2026-10-13 · <a href="./">Back to the map</a></p>
+    <p class="about-warn"><strong>Routes on this map are generated automatically</strong> from OpenStreetMap roads and trails and elevation data. Nobody has checked them on the ground. They are not route recommendations.</p>
+    <h2>Before you go</h2>
+    <ul>
+      <li><strong>Confirm access.</strong> A route or road can cross private land, tribal land, military land, or areas that are closed. A mapped road may be gated, washed out, or legal only with a permit. Check with the land manager (Forest Service, BLM, Park Service, state) for closures, permits, and current conditions. Turn on <em>Ownership</em> (next to Map) to see who manages the land, or use the <em>Land</em> filter to show peaks by who manages the summit; both are approximate.</li>
+      <li class="about-risk"><strong>Proceed at your own risk.</strong> Using these routes is entirely your own decision and responsibility; the author makes no guarantee that any route is safe, legal, open, or accurate.</li>
+      <li><strong>Off-trail legs are straight lines.</strong> They ignore cliffs, passes, rivers, and brush. The real way up can be longer, harder, or not possible.</li>
+      <li><strong>Mapped trails may not be for hiking.</strong> Mapped trails can be climbers' routes, abandoned trails, or mapping errors.</li>
+      <li><strong>Road grades come from map tags and can be out of date.</strong> Google Maps directions may not route the last unpaved stretch.</li>
+      <li><strong>Distance, gain, and time are rough estimates.</strong> Weather, snow, fitness, and route-finding change everything. You are responsible for your own safety and judgment.</li>
+    </ul>
+    <h2>What's on the map</h2>
+    <ul>
+      <li><strong>Peaks:</strong> every summit with at least <strong>250′ of prominence</strong> and <strong>1,000′ of elevation</strong> in the lower 48 and Hawaii, plus a few one-offs such as Boundary Peak (242′ prominence).</li>
+      <li><strong>Routes:</strong> computed for peaks with at least 250′ of prominence that are at least <strong>4,000′</strong> high, or <strong>3,000′</strong> in the states east of the Mississippi.</li>
+    </ul>
+    <h2>How routes are made</h2>
+    <ul>
+      <li><strong>Route:</strong> the shortest mapped trail path, then a straight off-trail line to the summit, counted at 1.3× its length (shown dotted).</li>
+      <li><strong>Choices:</strong> up to six different approaches are found, and the three with the shortest estimated round-trip time are shown. Different trailheads come first, plus different ways up from the same trailhead.</li>
+      <li><strong>Time:</strong> 2.5 mph on trail, 1 mph off-trail, plus 1 hour per 2,000′ of gain, with the descent taking 70% of the ascent time.</li>
+      <li><strong>Drive road:</strong> graded paved / graded dirt / high clearance / 4WD from OpenStreetMap tags; routes needing high clearance or 4WD are labeled.</li>
+    </ul>
+    <h2>Your log (My Peaks)</h2>
+    <ul>
+      <li><strong>Needs Chrome or Edge on a computer.</strong> My Peaks saves your log to a folder on your computer, and only those browsers let a web page do that. In Safari, Firefox, or on a phone you can use the map and routes, but not the log.</li>
+      <li><strong>What you can record:</strong> mark a peak <em>Want to</em>, or log a climb or attempt. Each peak can have as many ascents as you like, each with a date, notes, photos, and a GPX track. Tracks are drawn on the map. Peaks get a Skeleton Score (0–10).</li>
+      <li><strong>Seeing your peaks:</strong> logged peaks are colored on the map (climbed, attempted, want to). "Only my peaks" hides everything else, and the peak list can show just your peaks.</li>
+      <li><strong>Where it's saved:</strong> <em>Choose folder</em> picks a folder on your computer. Your log is saved there as ordinary files: <code>my_peaks.json</code>, with your photos and GPX tracks in <code>my_peaks_photos</code> and <code>my_peaks_gpx</code>. There's no account, and nothing is uploaded.</li>
+      <li><strong>Keep it safe:</strong> put the folder in iCloud Drive, OneDrive, or Dropbox to back it up and to use your log on another computer. On a later visit Chrome may ask you to <em>Reconnect</em> the folder; choosing "Allow on every visit" skips that.</li>
+    </ul>
+    <p class="about-credits">Data: peak prominence from Andrew Kirmse and Jonathan de Ferranti; names from USGS GNIS; roads and trails © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL); elevation from USGS via AWS Open Data; land ownership from the BLM Surface Management Agency map; state outlines from US EPA.</p>
+</main></body></html>

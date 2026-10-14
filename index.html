@@ -1,0 +1,2591 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>US Peak Atlas</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<style>
+  :root {
+    --ink: #221c12;
+    --ink-2: #5c5340;
+    --panel: #faf6eaee;
+    --border: rgba(34,28,18,0.15);
+    --sierra: #2a78d6;
+    --excluded: #c9591f;
+    --other: #1b8f63;
+    --contour: #7a5322;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); }
+  #map { position: absolute; inset: 0; background: #cfd8dc; }
+
+  #titlebar {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 1000;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 10px 16px; background: var(--panel); backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--border); pointer-events: none;
+  }
+  #titlebar h1 { font-size: 16px; margin: 0; font-weight: 600; pointer-events: auto; }
+  #titlebar span { font-size: 12px; color: var(--ink-2); pointer-events: auto; }
+  #titlebar .picker-group { margin-left: auto; display: flex; gap: 14px; flex-wrap: wrap; pointer-events: auto; }
+  #titlebar .eco-picker { display: flex; align-items: center; gap: 7px; pointer-events: auto; }
+  #titlebar .eco-picker label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-2);
+  }
+  #titlebar .eco-picker select {
+    font-size: 13px; color: var(--ink); background: #fff; border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 9px; min-width: 220px; cursor: pointer;
+  }
+  #titlebar .slider-group { display: flex; flex-wrap: wrap; gap: 6px 14px; flex: 0 1 auto; min-width: 0; pointer-events: auto; }
+  #titlebar .range-picker input[type="range"] {
+    width: 120px; accent-color: var(--sierra); cursor: pointer;
+  }
+  #titlebar .range-value {
+    font-size: 12px; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums;
+    min-width: 46px;
+  }
+  #titlebar .extra-status {
+    font-size: 11px; color: var(--ink-2); font-style: italic; white-space: nowrap;
+  }
+  #titlebar .mypeaks-picker select { min-width: 130px; }
+  #titlebar .eco-picker[hidden] { display: none; }
+  #titlebar .search-picker { position: relative; }
+  #peakSearch {
+    font: inherit; font-size: 13px; color: var(--ink); background: #fff; border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 9px; width: 220px;
+  }
+  .search-results {
+    position: absolute; top: calc(100% + 4px); left: 54px; z-index: 2000; width: 320px; max-height: 360px; overflow-y: auto;
+    background: #fff; border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+  }
+  .search-results .opt { display: flex; justify-content: space-between; gap: 10px; padding: 6px 10px; cursor: pointer; font-size: 13px; }
+  .search-results .opt .sub { font-size: 11px; color: var(--ink-2); white-space: nowrap; }
+  .search-results .opt.unnamed .nm { font-style: italic; color: var(--ink-2); }
+  .search-results .opt.active, .search-results .opt:hover { background: #f1ecdf; }
+  .search-results .empty { padding: 8px 10px; font-size: 12px; color: var(--ink-2); font-style: italic; }
+  .mp-btn {
+    font: inherit; font-size: 12px; color: var(--ink); background: #fff; border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 9px; cursor: pointer;
+  }
+  .mp-btn:hover { background: #f3eee0; }
+  .mp-btn[hidden] { display: none; }
+  #titlebar .about-btn { pointer-events: auto; font-size: 11.5px; padding: 3px 8px; }
+  .about-dialog {
+    width: min(620px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0; border: 1px solid var(--border);
+    border-radius: 12px; background: #fffdf7; color: var(--ink); box-shadow: 0 16px 48px rgba(0,0,0,0.3);
+  }
+  .about-dialog::backdrop { background: rgba(20, 16, 10, 0.45); }
+  .about-inner { padding: 16px 20px 18px; font-size: 13.5px; line-height: 1.5; }
+  .about-top { display: flex; justify-content: space-between; align-items: center; }
+  .about-dialog h2 { margin: 0; font-size: 18px; }
+  .about-dialog h3 { margin: 14px 0 4px; font-size: 14px; }
+  .about-dialog ul { margin: 0; padding-left: 18px; }
+  .about-dialog li { margin: 3px 0; }
+  .about-dialog p { margin: 8px 0; }
+  .about-warn { background: #fbf1df; border-left: 4px solid #9a5b13; padding: 8px 10px; border-radius: 4px; }
+  .about-credits { font-size: 11.5px; color: var(--ink-2); }
+  .about-dialog .about-risk { color: #b3261e; font-weight: 700; }
+  .about-dialog .about-risk strong { color: inherit; }
+  .about-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
+  .about-ok { font-weight: 600; padding: 6px 14px; }
+  .route-disclaimer { font-size: 11px; color: #6b4310; background: #fbf1df; border-radius: 4px; padding: 4px 7px; margin-top: 6px; }
+  .route-disclaimer button { font: inherit; color: #1f5fae; background: none; border: none; padding: 0; text-decoration: underline; cursor: pointer; }
+  .mp-btn:disabled { opacity: 0.45; cursor: default; background: #fff; }
+  #titlebar .reset-btn { align-self: center; white-space: nowrap; }
+
+  .mylog { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border); width: 280px; }
+  .mylog .mylog-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-2); margin-bottom: 6px; }
+  .mylog .status-row { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px; }
+  .mylog .status-btn {
+    font: inherit; font-size: 12px; padding: 3px 10px; border-radius: 999px; cursor: pointer;
+    border: 1.5px solid var(--c, var(--border)); background: #fff; color: var(--ink);
+  }
+  .mylog .status-btn.on { background: var(--c); color: #fff; }
+  .mylog .status-btn.clear { --c: var(--ink-2); }
+  .mylog label.field { display: block; font-size: 11px; color: var(--ink-2); margin: 6px 0 2px; }
+  .mylog input[type="date"], .mylog textarea {
+    font: inherit; font-size: 12px; width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px;
+    color: var(--ink); background: #fff;
+  }
+  .mylog textarea { min-height: 52px; resize: vertical; }
+  .mylog .photos { display: flex; gap: 5px; flex-wrap: wrap; margin: 8px 0 4px; }
+  .mylog .photos img { width: 62px; height: 62px; object-fit: cover; border-radius: 5px; cursor: zoom-in; border: 1px solid var(--border); }
+  .mylog .hint { font-size: 12px; color: var(--ink-2); font-style: italic; }
+  .access { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border); width: 280px; }
+  .access .mylog-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-2); margin-bottom: 4px; }
+  .access-line { font-size: 12.5px; line-height: 1.45; color: var(--ink); margin-bottom: 3px; }
+  .access-line strong { font-weight: 650; }
+  .access-muted { color: var(--ink-2); font-style: italic; }
+  .access-btn { margin: 4px 0 4px; }
+  .access-note { font-size: 10.5px; color: var(--ink-2); line-height: 1.35; margin-top: 3px; }
+  .access-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+  .access-head .link-btn, .access-opt .link-btn {
+    font: inherit; font-size: 12px; color: #1f5fae; background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline;
+  }
+  .access-opt { border-left: 4px solid var(--c); padding: 3px 0 4px 8px; margin-bottom: 6px; }
+  .access-opt-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .access-th { font-size: 12.5px; display: flex; align-items: baseline; gap: 5px; min-width: 0; }
+  .access-num {
+    display: inline-block; min-width: 15px; height: 15px; border-radius: 50%; background: var(--c); color: #fff;
+    font-size: 10px; font-weight: 700; text-align: center; line-height: 15px; flex: none;
+  }
+  .access-sub { font-size: 11.5px; color: var(--ink-2); line-height: 1.35; }
+  .access-links { font-size: 11.5px; color: var(--ink-2); line-height: 1.35; margin-top: 1px; }
+  .dir-link { color: #1f5fae; font-weight: 600; text-decoration: underline; white-space: nowrap; }
+  .access-opt.no-fit { opacity: 0.45; }
+  .show-all-btn { display: block; width: 100%; margin: 2px 0 8px; font-weight: 600; }
+  .list-routes-btn { font-size: 11px; padding: 2px 8px; }
+  .peak-list td.routes-cell { padding: 3px 8px; }
+  .list-car { color: var(--ink-2); font-size: 11px; }
+  .route-chip {
+    position: absolute; z-index: 1050; bottom: 36px; left: 10px; max-width: min(420px, calc(100vw - 20px));
+    background: #fffdf7; border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+    padding: 8px 10px; font-size: 12.5px; color: var(--ink);
+  }
+  .route-chip[hidden] { display: none; }
+  .route-chip { max-height: calc(100vh - 200px); overflow-y: auto; overflow-x: hidden; }
+  .route-chip-stats { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .road-sec { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); font-size: 11.5px; color: var(--ink-2); }
+  .road-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .road-head strong { color: var(--ink); font-weight: 600; }
+  .road-bar { display: flex; gap: 2px; height: 10px; margin: 6px 0 5px; }
+  .road-bar span { display: block; height: 100%; border-radius: 3px; min-width: 3px; }
+  .road-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  .road-sw { display: inline-block; width: 16px; height: 5px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
+  .road-rows { max-height: 132px; overflow: auto; margin-top: 5px; }
+  .road-row {
+    display: flex; align-items: center; gap: 6px; width: 100%; font: inherit; font-size: 11.5px; color: var(--ink);
+    background: none; border: none; padding: 2px 2px; text-align: left; cursor: pointer; border-radius: 4px;
+  }
+  .road-row:hover, .road-row.on { background: #f1ecdf; }
+  .road-row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .road-row .gr { color: var(--ink-2); white-space: nowrap; }
+  .road-row .mi { font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 46px; text-align: right; }
+  .road-info { font-size: 12px; color: var(--ink); min-width: 200px; }
+  .road-info h4 { margin: 0 0 4px; font-size: 13px; }
+  .road-info .why { color: var(--ink-2); margin: 3px 0 6px; }
+  .road-info table { border-collapse: collapse; font-size: 11.5px; margin-bottom: 6px; }
+  .road-info td { padding: 1px 8px 1px 0; vertical-align: top; }
+  .road-info td:first-child { color: var(--ink-2); }
+  .route-chip-head { display: flex; align-items: baseline; gap: 4px; margin-bottom: 4px; }
+  .route-chip-sub { color: var(--ink-2); }
+  .route-chip-actions { margin-left: auto; display: flex; gap: 10px; }
+  .route-chip .link-btn { font: inherit; font-size: 12px; color: #1f5fae; background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; }
+  .route-chip-line {
+    display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; font: inherit; font-size: 12px;
+    background: none; border: none; border-left: 4px solid var(--c); padding: 3px 0 3px 6px; margin-top: 2px; cursor: pointer; color: var(--ink);
+  }
+  .route-chip-line:hover { background: #f1ecdf; }
+  .route-chip-line.no-fit { opacity: 0.45; }
+  .route-chip-th { font-weight: 600; flex: 1; min-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .route-chip-stats { color: var(--ink-2); white-space: nowrap; }
+  .veh-badge {
+    display: inline-block; flex: none; font-size: 10px; font-weight: 700; line-height: 1; letter-spacing: 0.02em;
+    padding: 3px 5px; border-radius: 4px; white-space: nowrap; vertical-align: 1px; margin-left: 4px;
+    border: 1px solid #8a5a1c; color: #6b4310; background: #fbf1df;
+  }
+  .veh-badge.v4wd { background: #6b4310; border-color: #6b4310; color: #fff; }
+  .route-chip-via { flex: 0 1 auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-style: italic; }
+  .route-chip.has-profile { width: min(500px, calc(100vw - 20px)); max-width: none; }
+  .route-chip-line.picked { background: #f1ecdf; }
+  .route-profile { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); }
+  .route-profile-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 11.5px; color: var(--ink-2); }
+  .route-profile-head strong { color: var(--ink); font-weight: 600; }
+  .route-profile-read { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--ink); }
+  .route-profile svg { display: block; width: 100%; height: auto; margin-top: 2px; touch-action: none; }
+  .route-profile .ax { font-size: 10px; fill: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .route-profile .grid { stroke: rgba(34,28,18,0.1); stroke-width: 1; }
+  .route-profile .base { stroke: rgba(34,28,18,0.35); stroke-width: 1; }
+  .route-profile .cross { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 2 2; }
+  .route-profile-key { font-size: 10.5px; color: var(--ink-2); margin-top: 2px; }
+  .route-profile-hint { font-size: 11.5px; color: var(--ink-2); font-style: italic; margin-top: 6px; }
+
+  #titlebar .list-toggle { pointer-events: auto; font-weight: 600; }
+  .list-panel {
+    position: absolute; z-index: 1100; left: 10px; top: 120px; bottom: 30px; width: min(820px, calc(100vw - 20px));
+    display: flex; flex-direction: column; background: #fffdf7; border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.22); font-size: 12.5px; color: var(--ink);
+  }
+  .list-panel[hidden], #titlebar .list-toggle[hidden] { display: none; }
+  .list-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px 6px; font-size: 14px; }
+  .list-close { font-size: 20px; line-height: 1; background: none; border: none; cursor: pointer; color: var(--ink-2); padding: 0 4px; }
+  .list-controls { display: flex; gap: 8px; padding: 0 12px 6px; }
+  .list-controls input { flex: 1; font: inherit; border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }
+  .list-controls select { font: inherit; border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; background: #fff; }
+  .list-count { padding: 0 12px 6px; color: var(--ink-2); font-size: 11.5px; }
+  .list-scroll { flex: 1; overflow: auto; border-top: 1px solid var(--border); }
+  .peak-list { width: 100%; border-collapse: collapse; }
+  .peak-list th {
+    position: sticky; top: 0; background: #f4efe1; text-align: left; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.04em; color: var(--ink-2); padding: 6px 6px; cursor: pointer; user-select: none; white-space: nowrap;
+    border-bottom: 1px solid var(--border);
+  }
+  .peak-list td { padding: 5px 6px; border-bottom: 1px solid rgba(34,28,18,0.07); white-space: nowrap; }
+  .peak-list td:nth-child(1) { white-space: normal; min-width: 110px; }
+  .peak-list td:nth-child(4) { white-space: normal; min-width: 140px; }
+  .peak-list .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .peak-list tbody tr { cursor: pointer; }
+  .peak-list tbody tr:hover, .peak-list tbody tr:focus { background: #f1ecdf; outline: none; }
+  .list-dot { margin-right: 4px; }
+  .list-foot { padding: 6px 12px; font-size: 11px; color: var(--ink-2); border-top: 1px solid var(--border); }
+  .skel { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border); width: 280px; }
+  .skel-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+  .skel .mylog-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-2); }
+  .info-tip {
+    position: relative; display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px;
+    margin-left: 5px; border: 1px solid var(--ink-2); border-radius: 50%; font: italic 700 9px/1 Georgia, serif;
+    color: var(--ink-2); text-transform: none; letter-spacing: 0; vertical-align: 1px; cursor: help;
+  }
+  .info-tip:hover::after, .info-tip:focus::after {
+    content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%);
+    background: var(--ink); color: #fffdf7; font: 500 11.5px/1.3 system-ui, sans-serif; font-style: normal;
+    padding: 5px 8px; border-radius: 5px; white-space: nowrap; z-index: 10; pointer-events: none;
+  }
+  .info-tip:focus { outline: 2px solid var(--sierra); outline-offset: 1px; }
+  .skel-value { font-size: 13px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .skel-value.unset { color: var(--ink-2); font-weight: 500; }
+  .skel-row { display: flex; gap: 1px; }
+  .skel-btn {
+    --bone: #ece7dc; --bone-line: #c8bfad;
+    flex: 1; padding: 2px 0; border: none; background: none; cursor: pointer; border-radius: 4px;
+    transition: transform 0.08s ease;
+  }
+  .skel-btn svg { display: block; width: 100%; height: 34px; }
+  .skel-btn .bone { fill: var(--bone); stroke: var(--bone-line); stroke-width: 1.1; stroke-linejoin: round; }
+  .skel-btn .hole { fill: var(--bone-line); }
+  .skel-btn .line { fill: none; stroke: var(--bone-line); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .skel-btn.lit { --bone: #fffdf5; --bone-line: #231d12; }
+  .skel-btn.lit svg { filter: drop-shadow(0 1px 1.5px rgba(0,0,0,0.25)); }
+  .skel-btn.preview { --bone-line: #6b5d45; }
+  .skel-btn:not(:disabled):hover { transform: translateY(-2px); }
+  .skel-btn:focus-visible { outline: 2px solid var(--sierra); outline-offset: 1px; }
+  .skel-btn:disabled { cursor: default; }
+  .mylog .log-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .mylog .log-summary { font-size: 12px; font-weight: 600; color: var(--ink); }
+  .mylog .ascent {
+    border: 1px solid var(--border); border-left: 4px solid var(--c); border-radius: 7px;
+    padding: 7px 8px; margin-bottom: 8px; background: #fffdf7;
+  }
+  .mylog .ascent-top { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-bottom: 6px; }
+  .mylog .ascent-top input[type="date"] { width: auto; flex: 1; min-width: 118px; }
+  .mylog .status-btn.small { font-size: 11px; padding: 2px 8px; }
+  .mylog .ascent .photos { margin: 6px 0 2px; }
+  .mylog .ascent-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; margin-top: 4px; }
+  .mylog .file-btn, .mylog .link-btn {
+    font: inherit; font-size: 12px; color: #1f5fae; background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline;
+  }
+  .mylog .file-btn input { display: none; }
+  .mylog .link-btn.danger { color: #b33a3a; }
+  .mylog .gpx-info { color: var(--ink-2); flex-basis: 100%; }
+  #titlebar .tracks-toggle { display: flex; align-items: center; gap: 4px; text-transform: none; letter-spacing: 0; font-size: 12px; color: var(--ink); cursor: pointer; }
+
+  .panel {
+    background: var(--panel); backdrop-filter: blur(6px);
+    border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    font-size: 13px; color: var(--ink);
+  }
+  .panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-2); margin: 0 0 8px; font-weight: 600; }
+  #legend.panel { padding: 12px 14px; line-height: 1.9; }
+  #legend label { display: flex; align-items: center; gap: 7px; cursor: pointer; user-select: none; }
+  #legend input { accent-color: var(--ink); }
+  .swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+  .swatch.line { width: 16px; height: 0; border-top: 2.5px dashed var(--contour); border-radius: 0; }
+
+  #stats.panel { padding: 12px 14px; min-width: 170px; max-width: 240px; }
+  #titlebar .filters-toggle { display: none; }
+  .own-legend {
+    margin: 0 10px 8px 0 !important; background: #fffdf7; border: 1px solid var(--border);
+    border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,0.18); padding: 7px 10px; font-size: 11.5px; line-height: 1.6; color: var(--ink);
+  }
+  .own-legend[hidden] { display: none; }
+  .own-title { font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-2); }
+  .own-sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -2px; border: 1px solid rgba(34,28,18,0.25); }
+  .own-sw.own-clear { background: repeating-linear-gradient(45deg, #fff 0 3px, #ddd 3px 6px); }
+  .own-note { font-size: 10.5px; color: var(--ink-2); line-height: 1.3; margin-top: 2px; }
+
+  /* ---- phones / narrow screens ---- */
+  @media (max-width: 700px) {
+    #titlebar { padding: 8px 10px; gap: 6px 8px; }
+    #titlebar h1 { font-size: 15px; }
+    #titlebar .wide-only, #titlebar #subtitle, #titlebar .mypeaks-picker { display: none; }
+    #titlebar .picker-group { margin-left: 0; width: 100%; gap: 8px; }
+    #titlebar .filters-toggle { display: inline-block; pointer-events: auto; font-weight: 600; }
+    #titlebar .list-toggle { order: 1; }
+    #titlebar .search-picker { order: 2; width: 100%; }
+    #titlebar .search-picker label { display: none; }
+    #peakSearch { width: 100%; font-size: 16px; } /* 16px stops iOS zooming in on focus */
+    .search-results { left: 0; width: 100%; max-height: 50vh; }
+    /* State, map type and sliders live behind the Filters button */
+    #titlebar .picker-group > .eco-picker:not(.search-picker), #titlebar .slider-group { display: none; order: 3; }
+    #titlebar.filters-open .picker-group > .eco-picker:not(.search-picker):not(.mypeaks-picker),
+    #titlebar.filters-open .slider-group { display: flex; width: 100%; }
+    #titlebar.filters-open .eco-picker[hidden] { display: none; }
+    #titlebar .eco-picker select { min-width: 0; flex: 1; font-size: 16px; }
+    #titlebar .slider-group { flex-direction: column; gap: 6px; }
+    #titlebar .range-picker { width: 100%; }
+    #titlebar .range-picker label { width: 72px; flex: none; }
+    #titlebar .range-picker input[type="range"] { flex: 1; width: auto; }
+    #titlebar .reset-btn { align-self: flex-start; }
+    .leaflet-control-zoom { display: none; }
+    .leaflet-control-scale { display: none; }
+    .own-legend { font-size: 10.5px; line-height: 1.45; padding: 5px 8px; }
+    .leaflet-control-attribution { font-size: 9px; line-height: 1.3; }
+    #stats.panel { padding: 8px 10px; min-width: 0; }
+    #stats .stat-num { font-size: 22px; }
+    #stats .stat-sub { display: none; }
+    /* the peak list and route legend become bottom sheets */
+    .list-panel { left: 0; right: 0; width: auto; bottom: 0; border-radius: 12px 12px 0 0; }
+    .peak-list th:nth-child(3), .peak-list td:nth-child(3), .peak-list th:nth-child(4), .peak-list td:nth-child(4),
+    .peak-list th:nth-child(6), .peak-list td:nth-child(6), .peak-list th:nth-child(7), .peak-list td:nth-child(7),
+    .peak-list th:nth-child(9), .peak-list td:nth-child(9), .peak-list th:nth-child(10), .peak-list td:nth-child(10) { display: none; }
+    .list-foot { display: none; }
+    .route-chip, .route-chip.has-profile { left: 0 !important; right: 0; bottom: 0; width: auto; max-width: none; max-height: 48vh; border-radius: 12px 12px 0 0; }
+    .about-inner { padding: 14px 14px 16px; font-size: 13px; }
+  }
+  #stats .stat-num { font-size: 30px; font-weight: 700; line-height: 1.1; color: var(--ink); font-variant-numeric: tabular-nums; }
+  #stats .stat-label { font-size: 12.5px; color: var(--ink); margin-top: 2px; }
+  #stats .stat-sub { font-size: 11px; color: var(--ink-2); margin-top: 4px; line-height: 1.35; }
+
+  .leaflet-popup-content { font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 13px; line-height: 1.5; }
+  .leaflet-popup-content .peak-name { display: block; font-size: 15px; font-weight: 700; color: var(--ink); }
+  .leaflet-popup-content .peak-name.unnamed { font-style: italic; font-weight: 500; color: var(--ink-2); }
+  .leaflet-popup-content b { display: block; font-size: 14px; }
+  .leaflet-popup-content .range { display: block; color: var(--ink-2); }
+  .leaflet-popup-content .coord { display: block; font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-2); margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<div id="titlebar">
+  <h1>US Peak Atlas</h1>
+  <button type="button" class="mp-btn about-btn" id="aboutBtn" aria-haspopup="dialog">About<span class="wide-only"> &amp; disclaimer</span></button>
+  <span id="subtitle"></span>
+  <div class="picker-group">
+    <button type="button" class="mp-btn filters-toggle" id="filtersToggle" aria-expanded="false">Filters</button>
+    <div class="eco-picker search-picker">
+      <label for="peakSearch">Search</label>
+      <input type="search" id="peakSearch" placeholder="Peak name…" autocomplete="off" spellcheck="false"
+             role="combobox" aria-expanded="false" aria-controls="searchResults" aria-autocomplete="list">
+      <div class="search-results" id="searchResults" role="listbox" hidden></div>
+    </div>
+    <div class="eco-picker">
+      <label for="stateSelect">State</label>
+      <select id="stateSelect"></select>
+    </div>
+    <div class="eco-picker" id="landPicker" hidden>
+      <label for="landSelect" title="Who manages the land at the summit (BLM map; approximate)">Land</label>
+      <select id="landSelect"></select>
+    </div>
+    <div class="eco-picker">
+      <label for="mapSelect">Map</label>
+      <select id="mapSelect">
+        <option value="satellite" selected>Satellite</option>
+        <option value="topo">Topographic</option>
+        <option value="streets">Streets</option>
+      </select>
+      <label class="tracks-toggle" title="Who manages the land: BLM, Forest Service, Park Service, state, tribal, military. Private and unknown land is left clear."><input type="checkbox" id="ownershipToggle"> Ownership</label>
+    </div>
+    <div class="slider-group">
+      <div class="eco-picker range-picker">
+        <label for="elevSlider">Min elev</label>
+        <input type="range" id="elevSlider">
+        <span class="range-value" id="elevValue"></span>
+      </div>
+      <div class="eco-picker range-picker">
+        <label for="promSlider">Min prom</label>
+        <input type="range" id="promSlider">
+        <span class="range-value" id="promValue"></span>
+        <span class="extra-status" id="extraStatus"></span>
+      </div>
+      <div class="eco-picker range-picker" id="hikePicker" hidden>
+        <label for="hikeSlider" title="Shortest round-trip hike among a peak's approach options">Min hike</label>
+        <input type="range" id="hikeSlider" min="0" max="60" step="1" value="0">
+        <span class="range-value" id="hikeValue">any</span>
+      </div>
+      <div class="eco-picker range-picker" id="hikeMaxPicker" hidden>
+        <label for="hikeMaxSlider" title="Shortest round-trip hike among a peak's approach options">Max hike</label>
+        <input type="range" id="hikeMaxSlider" min="0" max="60" step="1" value="60">
+        <span class="range-value" id="hikeMaxValue">any</span>
+      </div>
+      <div class="eco-picker range-picker" id="trailPicker" hidden>
+        <label for="trailSlider" title="Minimum share of the one-way distance on mapped trail (the rest is off-trail)">Min trail</label>
+        <input type="range" id="trailSlider" min="0" max="100" step="5" value="0">
+        <span class="range-value" id="trailValue">any</span>
+      </div>
+      <button type="button" class="mp-btn reset-btn" id="resetFilters" title="Reset the land filter and the elevation, prominence, hike and trail sliders" disabled>Reset filters</button>
+    </div>
+    <button type="button" class="mp-btn list-toggle" id="listToggle" aria-expanded="false" aria-controls="listPanel" hidden>Peak list</button>
+    <div class="eco-picker mypeaks-picker">
+      <label for="myShow">My Peaks</label>
+      <button type="button" class="mp-btn" id="myConnect" title="Pick a folder on your computer (e.g. in iCloud Drive, OneDrive or Dropbox) to hold your log, photos and GPX tracks" hidden>Choose folder</button>
+      <select id="myShow" title="Show your logged peaks on the map, only them, or hide them">
+        <option value="all">All peaks + mine</option>
+        <option value="mine">Only my peaks</option>
+        <option value="hide">Hide my peaks</option>
+      </select>
+      <label class="tracks-toggle"><input type="checkbox" id="myTracks" checked> Tracks</label>
+      <span class="extra-status" id="myStatus"></span>
+    </div>
+  </div>
+</div>
+
+<div id="map"></div>
+<div id="ownershipLegend" class="own-legend" hidden aria-label="Land ownership legend">
+  <div class="own-title">Land ownership</div>
+  <div><span class="own-sw" style="background:#fee679"></span>BLM</div>
+  <div><span class="own-sw" style="background:#ccebc5"></span>Forest Service</div>
+  <div><span class="own-sw" style="background:#cabddc"></span>Park Service</div>
+  <div><span class="own-sw" style="background:#b3e3ee"></span>State</div>
+  <div><span class="own-sw" style="background:#fdb56d"></span>Tribal</div>
+  <div><span class="own-sw" style="background:#fbb4ce"></span>Military / other federal</div>
+  <div><span class="own-sw own-clear"></span>Private or unknown</div>
+  <div class="own-note">Approximate (BLM). Confirm access.</div>
+</div>
+<dialog id="aboutDialog" class="about-dialog" aria-labelledby="aboutTitle">
+  <div class="about-inner">
+    <div class="about-top">
+      <h2 id="aboutTitle">About the routes</h2>
+      <button type="button" class="list-close" id="aboutClose" aria-label="Close">×</button>
+    </div>
+    <p class="about-warn"><strong>Routes on this map are generated automatically</strong> from OpenStreetMap roads and trails and elevation data. Nobody has checked them on the ground. They are not route recommendations.</p>
+    <h3>Before you go</h3>
+    <ul>
+      <li><strong>Confirm access.</strong> A route or road can cross private land, tribal land, military land, or areas that are closed. A mapped road may be gated, washed out, or legal only with a permit. Check with the land manager (Forest Service, BLM, Park Service, state) for closures, permits, and current conditions. Turn on <em>Ownership</em> (next to Map) to see who manages the land, or use the <em>Land</em> filter to show peaks by who manages the summit; both are approximate.</li>
+      <li class="about-risk"><strong>Proceed at your own risk.</strong> Using these routes is entirely your own decision and responsibility; the author makes no guarantee that any route is safe, legal, open, or accurate.</li>
+      <li><strong>Off-trail legs are straight lines.</strong> They ignore cliffs, passes, rivers, and brush. The real way up can be longer, harder, or not possible.</li>
+      <li><strong>Mapped trails may not be for hiking.</strong> Mapped trails can be climbers' routes, abandoned trails, or mapping errors.</li>
+      <li><strong>Road grades come from map tags and can be out of date.</strong> Google Maps directions may not route the last unpaved stretch.</li>
+      <li><strong>Distance, gain, and time are rough estimates.</strong> Weather, snow, fitness, and route-finding change everything. You are responsible for your own safety and judgment.</li>
+    </ul>
+    <h3>What's on the map</h3>
+    <ul>
+      <li><strong>Peaks:</strong> every summit with at least <strong>250′ of prominence</strong> and <strong>1,000′ of elevation</strong> in the lower 48 and Hawaii, plus a few one-offs such as Boundary Peak (242′ prominence).</li>
+      <li><strong>Routes:</strong> computed for peaks with at least 250′ of prominence that are at least <strong>4,000′</strong> high, or <strong>3,000′</strong> in the states east of the Mississippi.</li>
+    </ul>
+    <h3>How routes are made</h3>
+    <ul>
+      <li><strong>Route:</strong> the shortest mapped trail path, then a straight off-trail line to the summit, counted at 1.3× its length (shown dotted).</li>
+      <li><strong>Choices:</strong> up to six different approaches are found, and the three with the shortest estimated round-trip time are shown. Different trailheads come first, plus different ways up from the same trailhead.</li>
+      <li><strong>Time:</strong> 2.5 mph on trail, 1 mph off-trail, plus 1 hour per 2,000′ of gain, with the descent taking 70% of the ascent time.</li>
+      <li><strong>Drive road:</strong> graded paved / graded dirt / high clearance / 4WD from OpenStreetMap tags; routes needing high clearance or 4WD are labeled.</li>
+    </ul>
+    <h3>Your log (My Peaks)</h3>
+    <ul>
+      <li><strong>Needs Chrome or Edge on a computer.</strong> My Peaks saves your log to a folder on your computer, and only those browsers let a web page do that. In Safari, Firefox, or on a phone you can use the map and routes, but not the log.</li>
+      <li><strong>What you can record:</strong> mark a peak <em>Want to</em>, or log a climb or attempt. Each peak can have as many ascents as you like, each with a date, notes, photos, and a GPX track. Tracks are drawn on the map. Peaks get a Skeleton Score (0–10).</li>
+      <li><strong>Seeing your peaks:</strong> logged peaks are colored on the map (climbed, attempted, want to). "Only my peaks" hides everything else, and the peak list can show just your peaks.</li>
+      <li><strong>Where it's saved:</strong> <em>Choose folder</em> picks a folder on your computer. Your log is saved there as ordinary files: <code>my_peaks.json</code>, with your photos and GPX tracks in <code>my_peaks_photos</code> and <code>my_peaks_gpx</code>. There's no account, and nothing is uploaded.</li>
+      <li><strong>Keep it safe:</strong> put the folder in iCloud Drive, OneDrive, or Dropbox to back it up and to use your log on another computer. On a later visit Chrome may ask you to <em>Reconnect</em> the folder; choosing "Allow on every visit" skips that.</li>
+    </ul>
+    <p class="about-credits">Data: peak prominence from Andrew Kirmse and Jonathan de Ferranti; names from USGS GNIS; roads and trails © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL); elevation from USGS via AWS Open Data; land ownership from the BLM Surface Management Agency map; state outlines from US EPA.</p>
+    <div class="about-actions"><button type="button" class="mp-btn about-ok" id="aboutOk">I understand</button></div>
+  </div>
+</dialog>
+<div id="routeChip" class="route-chip" hidden role="status" aria-live="polite"></div>
+<aside id="listPanel" class="list-panel" hidden aria-label="Peak list">
+  <div class="list-head">
+    <strong>Peaks with approach estimates</strong>
+    <button type="button" class="list-close" id="listClose" aria-label="Close list">×</button>
+  </div>
+  <div class="list-controls">
+    <input type="search" id="listFilter" placeholder="Filter by peak or trailhead…" autocomplete="off">
+    <select id="listScope" aria-label="Which peaks">
+      <option value="all">All</option>
+      <option value="view">In map view</option>
+      <option value="mine">My Peaks</option>
+    </select>
+  </div>
+  <div class="list-count" id="listCount"></div>
+  <div class="list-scroll">
+    <table class="peak-list"><thead id="listHead"></thead><tbody id="listBody"></tbody></table>
+  </div>
+  <div class="list-foot">Shows each peak's fastest approach that fits your filters; miles are round trip. Click a row for all options.</div>
+</aside>
+
+<script src="data/peaks.js"></script>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<!-- optional: approach/drive estimates from compute_access.py; the map works without it -->
+<script>window.__SITE_CONFIG__ = { extraPeaks: false };</script>
+<script src="data/access_index.js"></script>
+<script>
+(function () {
+  const SEL_COLOR = "#2a78d6";
+  const OTHER_COLOR = "#1b8f63";
+
+  // data/peaks.js (classify_peaks.py web): peaks as compact rows
+  // [lat, lon, elev, prom, range index, state index, l4 index or -1, name or 0].
+  const RAW = window.__PEAKS__;
+  const data = Object.assign({}, RAW, {
+    peaks: RAW.peaks.map(([lat, lon, elev, prom, r, st, l4, name, own, always]) => ({
+      lat, lon, elev, prom, range: RAW.ranges[r], state: RAW.states[st], l4: l4 >= 0 ? RAW.l4[l4] : null,
+      name: name || "Peak " + elev, named: !!name, own: (RAW.owners || [])[own] || null, always: !!always,
+    })),
+  });
+  const peaks = data.peaks;
+  const stateBorders = data.state_borders || {}; // {name: parts}
+  const stateNames = Object.keys(stateBorders).sort((a, b) => a.localeCompare(b));
+
+  let selected = ""; // a state name, or "" for all states
+
+  // ---- elevation / prominence reveal-hide filters ----
+  let elevFloor = Infinity, elevCeil = -Infinity, promFloor = Infinity, promCeil = -Infinity;
+  peaks.forEach((p) => {
+    if (p.elev < elevFloor) elevFloor = p.elev;
+    if (p.elev > elevCeil) elevCeil = p.elev;
+    if (p.prom < promFloor && !p.always) promFloor = p.prom;
+    if (p.prom > promCeil) promCeil = p.prom;
+  });
+  let minElev = elevFloor;
+  let minProm = promFloor;
+  // One-off peaks below the prominence floor (e.g. Boundary Peak, 242') show
+  // whenever the slider is at the floor or lower.
+  const promOk = (p) => p.prom >= minProm || (p.always && minProm <= promFloor);
+  function formatFt(n) { return Math.round(n).toLocaleString() + "′"; }
+
+  function partsFor(name) { return name === "" ? null : stateBorders[name]; }
+
+  // ---- land filter: who manages the land at the summit ("" = any) ----
+  let landSel = "";
+  const PRIVATE = "Private or unknown";
+  const MILITARY = "Military / other federal";
+  function landOk(own) {
+    if (!landSel) return true;
+    if (landSel === "public") return !!own && own !== PRIVATE;
+    if (landSel === "public-civil") return !!own && own !== PRIVATE && own !== MILITARY;
+    return (own || PRIVATE) === landSel;
+  }
+  const landSelect = document.getElementById("landSelect");
+  if (RAW.owners) {
+    [["", "Any land"], ["public", "Public land (any agency)"], ["public-civil", "Public land (non-military)"]].concat(RAW.owners.filter((o) => o !== PRIVATE).map((o) => [o, o]), [[PRIVATE, PRIVATE]])
+      .forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; landSelect.appendChild(o); });
+    document.getElementById("landPicker").hidden = false;
+  }
+  let ownByKey = null; // peak key -> land manager, for the peak list (built on first use)
+  function ownOfKey(key) {
+    if (!ownByKey) ownByKey = new Map(peaks.map((p) => [p.lat.toFixed(4) + "," + p.lon.toFixed(4), p.own]));
+    return ownByKey.get(key);
+  }
+  function matches(name, p) { return name === "" || p.state === name; }
+
+  // ---- state picker (title bar) ----
+  const stateSelect = document.getElementById("stateSelect");
+  const allStatesOpt = document.createElement("option");
+  allStatesOpt.value = "";
+  allStatesOpt.textContent = "All States";
+  stateSelect.appendChild(allStatesOpt);
+  stateNames.forEach((name) => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    stateSelect.appendChild(opt);
+  });
+  stateSelect.value = "";
+
+  // ---- map + base layers ----
+  const LOWER_48 = [[24.5, -124.8], [49.4, -66.9]];
+  const TOUCH = window.matchMedia("(pointer: coarse)").matches;
+  const PHONE = () => window.matchMedia("(max-width: 700px)").matches;
+  // a wider hit area around each dot so small peaks are easy to tap
+  const map = L.map("map", { preferCanvas: true, renderer: L.canvas({ tolerance: TOUCH ? 10 : 2 }), zoomControl: false })
+    .fitBounds(LOWER_48, { padding: PHONE() ? [4, 4] : [20, 20], animate: false });
+  L.control.zoom({ position: "topright" }).addTo(map);
+  L.control.scale({ position: "bottomleft", imperial: true }).addTo(map);
+
+  const streets = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    updateWhenZooming: false,
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  });
+  const topo = L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
+    updateWhenZooming: false,
+    maxZoom: 17,
+    attribution: 'Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
+  });
+  const satellite = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+    updateWhenZooming: false,
+    maxZoom: 19,
+    attribution: "Tiles &copy; Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+  });
+
+  satellite.addTo(map);
+  const baseLayers = { satellite, topo, streets };
+  let activeBase = satellite;
+
+  // ---- bold boundary for the selected state ----
+  const outlineLayer = L.polygon([], {
+    color: "#7a5322", weight: 2.5, dashArray: "1 7", lineCap: "round",
+    fill: true, fillColor: "#7a5322", fillOpacity: 0.06,
+    interactive: false,
+  });
+
+  // ---- peaks: created once, recolored + moved between the two layers on selection change ----
+  const selectedLayer = L.layerGroup();
+  const otherLayer = L.layerGroup();
+  // autoPan keeps popups clear of the title bar floating over the map's top edge
+  const POPUP_OPTS = {
+    maxWidth: Math.min(340, window.innerWidth - 40), minWidth: Math.min(240, window.innerWidth - 60),
+    maxHeight: Math.min(460, Math.round(window.innerHeight * 0.6)),
+    autoPanPaddingTopLeft: [PHONE() ? 8 : 20, 140], autoPanPaddingBottomRight: [PHONE() ? 8 : 20, 20],
+  };
+  // Dots shrink when zoomed out so a national view reads as points, not blobs.
+  const zoomScale = (z) => (z <= 4 ? 0.3 : z === 5 ? 0.4 : z === 6 ? 0.55 : z === 7 ? 0.75 : 1);
+  function sizeMarker(marker, z) {
+    const k = zoomScale(z);
+    marker.setRadius(marker._baseR * k);
+    marker.setStyle({ weight: k < 0.5 ? 0 : 1 });
+  }
+  function makeMarker(p) {
+    const r = 6; // every peak the same size (shrunk only when zoomed far out, below)
+    const k = zoomScale(map.getZoom());
+    const marker = L.circleMarker([p.lat, p.lon], {
+      radius: r * k, weight: k < 0.5 ? 0 : 1, opacity: 0.9, fillOpacity: 0.75,
+      color: OTHER_COLOR, fillColor: OTHER_COLOR,
+    });
+    marker._baseR = r;
+    marker.bindPopup(() => buildPopup(p), POPUP_OPTS);
+    otherLayer.addLayer(marker);
+    return { p, marker };
+  }
+  const markers = peaks.map(makeMarker);
+  let sizedAt = map.getZoom();
+  map.on("zoomend", () => {
+    const z = map.getZoom();
+    if (zoomScale(z) === zoomScale(sizedAt)) return;
+    sizedAt = z;
+    markers.forEach(({ marker }) => sizeMarker(marker, z));
+  });
+
+  // ---- lazy-loaded low-prominence tier (100'-300'; the main dataset only
+  // goes down to 300' to stay a small inline payload) ----
+  const MAIN_PROM_FLOOR = 250;
+  // The published site leaves out the 100'-300' tier (build_site.py sets this).
+  const EXTRA_PEAKS_OK = !(window.__SITE_CONFIG__ && window.__SITE_CONFIG__.extraPeaks === false);
+  document.getElementById("subtitle").textContent =
+    peaks.length.toLocaleString() + " peaks ≥ 1,000′ · ≥250′ prominence · lower 48 and Hawaii" +
+    (EXTRA_PEAKS_OK ? " (drag Min Prom below 250′ for smaller peaks)" : "") + " · click a peak for details";
+  const ADD_PEAKS_CHUNK = 4000; // marker creation is expensive at ~277k peaks; chunk it via setTimeout so the tab stays responsive and the loading text actually updates instead of the page looking frozen
+  let extraLoaded = false, extraLoading = false;
+  function addPeaksChunked(newPeaks, onDone) {
+    const total = newPeaks.length;
+    let i = 0;
+    function step() {
+      const end = Math.min(i + ADD_PEAKS_CHUNK, total);
+      for (; i < end; i++) {
+        peaks.push(newPeaks[i]);
+        markers.push(makeMarker(newPeaks[i]));
+      }
+      if (extraStatusEl) extraStatusEl.textContent = "loading… " + i.toLocaleString() + " / " + total.toLocaleString();
+      if (i < total) setTimeout(step, 0);
+      else onDone();
+    }
+    step();
+  }
+  function ensureExtraPeaksLoaded(onReady) {
+    if (extraLoaded) { onReady(); return; }
+    if (extraLoading) return;
+    extraLoading = true;
+    if (extraStatusEl) extraStatusEl.textContent = "loading peaks to 100′…";
+    const script = document.createElement("script");
+    script.src = "sierra_classified_extra.js";
+    script.onload = () => {
+      const extra = window.__EXTRA_PEAKS__;
+      window.__EXTRA_PEAKS__ = null;
+      const already = new Set(peaks.filter((p) => p.always).map(peakKey));
+      const newPeaks = extra ? extra.peaks.filter((p) => p.prom < MAIN_PROM_FLOOR && !already.has(peakKey(p))) : [];
+      addPeaksChunked(newPeaks, () => {
+        extraLoaded = true;
+        extraLoading = false;
+        if (extraStatusEl) extraStatusEl.textContent = "+" + newPeaks.length.toLocaleString() + " peaks loaded";
+        onReady();
+      });
+    };
+    script.onerror = () => {
+      extraLoading = false;
+      if (extraStatusEl) extraStatusEl.textContent = "couldn't load sierra_classified_extra.js";
+    };
+    document.head.appendChild(script);
+  }
+
+  selectedLayer.addTo(map);
+  otherLayer.addTo(map);
+  outlineLayer.addTo(map);
+
+
+  // ---- My peaks: a personal log saved as real files in a folder you pick
+  // (my_peaks.json + my_peaks_photos/ + my_peaks_gpx/), via Chrome/Edge's
+  // File System Access API. Each peak keeps a list of ascents (any number of
+  // climbs and attempts, each with its own date, notes, photos and optional
+  // GPX track) plus a "want to" flag. Saved peaks draw on their own overlay
+  // layer rather than restyling base markers, so applySelection()'s layer
+  // juggling is untouched. ----
+  const STATUS = {
+    climbed: { label: "Climbed", color: "#f2a900" },
+    attempted: { label: "Attempted", color: "#d64545" },
+    want: { label: "Want to", color: "#9b59d0" },
+  };
+  const LOG_FILE = "my_peaks.json";
+  const PHOTO_DIR = "my_peaks_photos";
+  const GPX_DIR = "my_peaks_gpx";
+  const fsSupported = typeof window.showDirectoryPicker === "function";
+  // The log lives in a folder the visitor picks (File System Access API -
+  // Chrome/Edge on a computer): my_peaks.json plus photo and GPX folders as
+  // plain files they own, back up and sync themselves. Other browsers get a
+  // note saying so.
+  let dirHandle = null;   // set while a folder is connected
+  let myLog = { version: 2, peaks: {} };
+  const trackLayer = L.layerGroup().addTo(map);
+  const myLayer = L.layerGroup().addTo(map);
+  const myConnectBtn = document.getElementById("myConnect");
+  const myShowSel = document.getElementById("myShow");
+  const myTracksChk = document.getElementById("myTracks");
+  const myStatusEl = document.getElementById("myStatus");
+  let saveNote = "";
+  let openPopup = null;
+  map.on("popupopen", (ev) => { openPopup = ev.popup; });
+  map.on("popupclose", (ev) => { if (openPopup === ev.popup) openPopup = null; });
+
+  const peakKey = (p) => p.lat.toFixed(4) + "," + p.lon.toFixed(4);
+  const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+  // Derived, never stored: climbed if any ascent summited, else attempted if
+  // any attempt, else want-to if flagged.
+  function statusOf(e) {
+    if (!e) return null;
+    const a = e.ascents || [];
+    if (a.some((x) => x.outcome === "climbed")) return "climbed";
+    if (a.some((x) => x.outcome === "attempted")) return "attempted";
+    return e.want ? "want" : null;
+  }
+
+  // v1 stored one status/date/notes/photos per peak; v2 keeps a list of ascents.
+  function migrate(log) {
+    const peaks = (log && log.peaks) || {};
+    Object.values(peaks).forEach((e) => {
+      if (e.ascents) return;
+      e.ascents = [];
+      if (e.status === "climbed" || e.status === "attempted") {
+        e.ascents.push({ id: newId(), outcome: e.status, date: e.date || "", notes: e.notes || "", photos: e.photos || [], gpx: null });
+        e.want = false;
+      } else {
+        e.want = e.status === "want";
+      }
+      delete e.status; delete e.date; delete e.notes; delete e.photos;
+    });
+    return { version: 2, peaks };
+  }
+
+  function idb(mode, fn) {
+    return new Promise((resolve, reject) => {
+      const open = indexedDB.open("westernPeakAtlas", 1);
+      open.onupgradeneeded = () => open.result.createObjectStore("handles");
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const tx = open.result.transaction("handles", mode);
+        const req = fn(tx.objectStore("handles"));
+        tx.oncomplete = () => resolve(req && req.result);
+        tx.onerror = () => reject(tx.error);
+      };
+    });
+  }
+
+  async function readLog() {
+    try {
+      const fh = await dirHandle.getFileHandle(LOG_FILE);
+      return migrate(JSON.parse(await (await fh.getFile()).text()));
+    } catch (e) {
+      if (e.name === "NotFoundError") return { version: 2, peaks: {} };
+      throw e;
+    }
+  }
+
+  let saveTimer = null;
+  function scheduleSave() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(writeLog, 400);
+  }
+  async function writeLog() {
+    if (!dirHandle) return;
+    try {
+      const fh = await dirHandle.getFileHandle(LOG_FILE, { create: true });
+      const w = await fh.createWritable();
+      await w.write(JSON.stringify(myLog, null, 2));
+      await w.close();
+      saveNote = "saved ✓";
+    } catch (e) {
+      saveNote = "save failed: " + e.message;
+    }
+    renderMyStatus();
+  }
+
+  async function writeFileAt(path, blob) {
+    const parts = path.split("/");
+    let dir = dirHandle;
+    for (const seg of parts.slice(0, -1)) dir = await dir.getDirectoryHandle(seg, { create: true });
+    const w = await (await dir.getFileHandle(parts[parts.length - 1], { create: true })).createWritable();
+    await w.write(blob);
+    await w.close();
+  }
+
+  async function saveFile(topDir, key, file) {
+    const path = topDir + "/" + key.replace(",", "_") + "/" + Date.now() + "-" + file.name.replace(/[^\w.\-]+/g, "_");
+    await writeFileAt(path, file);
+    return path;
+  }
+
+  async function getFile(path) {
+    const parts = path.split("/");
+    let dir = dirHandle;
+    for (const seg of parts.slice(0, -1)) dir = await dir.getDirectoryHandle(seg);
+    return (await dir.getFileHandle(parts[parts.length - 1])).getFile();
+  }
+
+  // ---- GPX ----
+  const MAX_TRACK_POINTS = 5000; // per segment, decimated for drawing only
+  function parseGpx(text) {
+    const doc = new DOMParser().parseFromString(text, "application/xml");
+    if (doc.getElementsByTagName("parsererror").length) throw new Error("not a valid GPX file");
+    const segs = [];
+    let dist = 0, gain = 0;
+    const collect = (nodes) => {
+      const pts = [];
+      let prev = null, prevEle = null;
+      for (const n of nodes) {
+        const lat = parseFloat(n.getAttribute("lat")), lon = parseFloat(n.getAttribute("lon"));
+        if (!isFinite(lat) || !isFinite(lon)) continue;
+        const ll = L.latLng(lat, lon);
+        if (prev) dist += prev.distanceTo(ll);
+        prev = ll;
+        const eleNode = n.getElementsByTagNameNS("*", "ele")[0];
+        const ele = eleNode ? parseFloat(eleNode.textContent) : NaN;
+        if (isFinite(ele)) { if (prevEle !== null && ele > prevEle) gain += ele - prevEle; prevEle = ele; }
+        pts.push([lat, lon]);
+      }
+      if (pts.length < 2) return;
+      const step = Math.ceil(pts.length / MAX_TRACK_POINTS);
+      segs.push(step > 1 ? pts.filter((_, i) => i % step === 0 || i === pts.length - 1) : pts);
+    };
+    for (const seg of doc.getElementsByTagNameNS("*", "trkseg")) collect(seg.getElementsByTagNameNS("*", "trkpt"));
+    for (const rte of doc.getElementsByTagNameNS("*", "rte")) collect(rte.getElementsByTagNameNS("*", "rtept"));
+    if (!segs.length) throw new Error("no track or route points in this GPX");
+    return { segs, miles: dist / 1609.344, gainFt: gain * 3.28084 };
+  }
+
+  const trackCache = new Map(); // gpx path -> Promise<{segs, miles, gainFt}>
+  function loadTrack(path) {
+    if (!trackCache.has(path)) {
+      trackCache.set(path, getFile(path).then((f) => f.text()).then(parseGpx));
+      trackCache.get(path).catch(() => trackCache.delete(path));
+    }
+    return trackCache.get(path);
+  }
+
+  const trackLines = new Map(); // ascent id -> L.polyline
+  function renderTracks() {
+    const wanted = new Map();
+    Object.entries(myLog.peaks).forEach(([key, e]) =>
+      (e.ascents || []).forEach((a) => { if (a.gpx) wanted.set(a.id, { key, a }); }));
+    trackLines.forEach((line, id) => {
+      const w = wanted.get(id);
+      if (!w || line._gpxPath !== w.a.gpx) { trackLayer.removeLayer(line); trackLines.delete(id); }
+    });
+    wanted.forEach(({ key, a }, id) => {
+      const color = STATUS[a.outcome].color;
+      const existing = trackLines.get(id);
+      if (existing) { existing.setStyle({ color }); return; }
+      loadTrack(a.gpx).then((t) => {
+        if (trackLines.has(id) || !(myLog.peaks[key] && (myLog.peaks[key].ascents || []).some((x) => x.id === id && x.gpx === a.gpx))) return;
+        const line = L.polyline(t.segs, { color, weight: 3.5, opacity: 0.9, lineJoin: "round" });
+        line._gpxPath = a.gpx;
+        line.on("click", (ev) => {
+          L.popup(POPUP_OPTS).setLatLng(ev.latlng).setContent(buildPopup(myLog.peaks[key])).openOn(map);
+        });
+        trackLines.set(id, line);
+        trackLayer.addLayer(line);
+        raiseMyLayer();
+      }).catch(() => {});
+    });
+  }
+
+  function logChanged() {
+    trackCache.clear();
+    renderMyLayer();
+    renderTracks();
+    renderMyStatus();
+  }
+
+  async function connectWithHandle(handle) {
+    dirHandle = handle;
+    myLog = await readLog();
+    saveNote = "";
+    logChanged();
+  }
+
+  async function connectFolder(fresh) {
+    try {
+      let handle = fresh ? null : await idb("readonly", (s) => s.get("peaksDir"));
+      if (handle) {
+        if ((await handle.requestPermission({ mode: "readwrite" })) !== "granted") handle = null;
+      }
+      if (!handle) {
+        handle = await window.showDirectoryPicker({ id: "peaks", mode: "readwrite" });
+        await idb("readwrite", (s) => s.put(handle, "peaksDir"));
+      }
+      await connectWithHandle(handle);
+    } catch (e) {
+      if (e.name !== "AbortError") { saveNote = "couldn't open folder: " + e.message; renderMyStatus(); }
+    }
+  }
+
+  // On load: reconnect the folder picked earlier if the browser still allows
+  // it; otherwise the button offers to reconnect it.
+  async function restoreFolder() {
+    if (!fsSupported) { renderMyStatus(); return; }
+    try {
+      const handle = await idb("readonly", (s) => s.get("peaksDir"));
+      if (!handle) return;
+      if ((await handle.queryPermission({ mode: "readwrite" })) === "granted") await connectWithHandle(handle);
+      else myConnectBtn.textContent = "Reconnect " + handle.name;
+    } catch (e) {
+      // no saved folder: stay on the Choose folder button
+    }
+    renderMyStatus();
+  }
+
+  function renderMyStatus() {
+    myConnectBtn.hidden = !fsSupported || !!dirHandle;
+    if (!fsSupported) { myStatusEl.textContent = "My Peaks works in Chrome or Edge on a computer"; return; }
+    if (!dirHandle) { myStatusEl.textContent = saveNote || "choose a folder to keep your log"; return; }
+    let climbedPeaks = 0, summits = 0, attempts = 0, wanted = 0;
+    Object.values(myLog.peaks).forEach((e) => {
+      const st = statusOf(e);
+      if (st === "climbed") climbedPeaks++;
+      if (st === "want") wanted++;
+      (e.ascents || []).forEach((a) => { if (a.outcome === "climbed") summits++; else attempts++; });
+    });
+    const n = (count, word) => count + " " + word + (count === 1 ? "" : "s");
+    myStatusEl.textContent =
+      n(climbedPeaks, "peak") + " climbed · " + n(summits, "summit") + " · " + n(attempts, "attempt") + " · " + wanted + " wanted" +
+      " — " + dirHandle.name + "/" + LOG_FILE + (saveNote ? " · " + saveNote : "");
+  }
+
+  // Updated in place (not cleared and rebuilt) so a popup you're editing on
+  // one of these markers stays open when its status changes.
+  const myMarkers = new Map();
+  function renderMyLayer() {
+    myMarkers.forEach((m, key) => {
+      if (!statusOf(myLog.peaks[key])) { myLayer.removeLayer(m); myMarkers.delete(key); }
+    });
+    Object.entries(myLog.peaks).forEach(([key, e]) => {
+      const st = statusOf(e);
+      if (!st) return;
+      let m = myMarkers.get(key);
+      if (!m) {
+        m = L.circleMarker([e.lat, e.lon], { radius: 7, weight: 2, color: "#fff", opacity: 1, fillOpacity: 0.95 });
+        m.bindPopup(() => buildPopup(myLog.peaks[key] || e), POPUP_OPTS);
+        myLayer.addLayer(m);
+        myMarkers.set(key, m);
+      }
+      m.setStyle({ fillColor: STATUS[st].color });
+    });
+    raiseMyLayer();
+  }
+  function raiseMyLayer() {
+    myLayer.eachLayer((l) => l.bringToFront());
+  }
+
+  // all peaks + mine (default) / only my peaks / hide my peaks (and tracks)
+  function setShowMode() {
+    const mode = myShowSel.value;
+    [selectedLayer, otherLayer].forEach((layer) => {
+      if (mode === "mine") map.removeLayer(layer);
+      else if (!map.hasLayer(layer)) layer.addTo(map);
+    });
+    if (mode === "hide") map.removeLayer(myLayer);
+    else if (!map.hasLayer(myLayer)) myLayer.addTo(map);
+    const tracksOn = mode !== "hide" && myTracksChk.checked;
+    if (tracksOn && !map.hasLayer(trackLayer)) trackLayer.addTo(map);
+    if (!tracksOn) map.removeLayer(trackLayer);
+    myTracksChk.disabled = mode === "hide";
+    raiseMyLayer();
+    try { localStorage.setItem("myShow", mode); } catch (e) { /* storage blocked: just not remembered */ }
+  }
+
+  function el(tag, cls, text) {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  }
+  function button(cls, text, onclick) {
+    const b = el("button", cls, text);
+    b.type = "button";
+    b.onclick = onclick;
+    return b;
+  }
+  function fileButton(label, accept, multiple, onFiles) {
+    const lbl = el("label", "file-btn", label);
+    const input = el("input");
+    input.type = "file";
+    input.accept = accept;
+    input.multiple = multiple;
+    input.onchange = () => { const files = Array.from(input.files || []); input.value = ""; if (files.length) onFiles(files); };
+    lbl.appendChild(input);
+    return lbl;
+  }
+
+  function buildPopup(p) {
+    const root = el("div");
+    root.appendChild(el("span", "peak-name" + (p.named === false ? " unnamed" : ""), p.name));
+    root.appendChild(el("b", "", p.elev.toLocaleString() + "′ elev · " + p.prom.toLocaleString() + "′ prom"));
+    const own = p.own || ownOfKey(p.lat.toFixed(4) + "," + p.lon.toFixed(4));
+    if (p.state) root.appendChild(el("span", "range", p.state + (own ? " · " + (own === PRIVATE ? "private or unknown land" : own) + " (approx.)" : "")));
+    root.appendChild(el("span", "coord", p.lat.toFixed(4) + ", " + p.lon.toFixed(4)));
+    const access = buildAccessSection(p);
+    if (access) root.appendChild(access);
+    root.appendChild(buildSkeletonSection(p));
+    root.appendChild(buildLogSection(p));
+    return root;
+  }
+
+  function ensureEntryFor(p) {
+    const key = peakKey(p);
+    if (!myLog.peaks[key]) {
+      myLog.peaks[key] = {
+        name: p.name, elev: p.elev, prom: p.prom, lat: p.lat, lon: p.lon,
+        range: p.range || "", state: p.state || "", named: p.named !== false,
+        want: false, ascents: [],
+      };
+    }
+    myLog.peaks[key].updated = new Date().toISOString();
+    return myLog.peaks[key];
+  }
+  // A peak stays in the log while it has anything worth keeping.
+  function pruneEntryFor(p) {
+    const key = peakKey(p);
+    const e = myLog.peaks[key];
+    if (e && !e.want && !(e.ascents || []).length && !e.skeleton) delete myLog.peaks[key];
+  }
+  function refreshPopup(p) {
+    if (openPopup) openPopup.setContent(buildPopup(myLog.peaks[peakKey(p)] || p));
+  }
+
+  // ---- Access: up to three approach options per peak, from compute_access.py
+  // (sierra_access.js). Optional - peaks without an entry get no section. ----
+  // data/access_index.js has compact numbers per route for the filters and
+  // the peak list; each 1-degree tile's full routes, profiles and drive roads
+  // (data/access/<lat>_<lon>.js) are loaded on demand with a <script> tag,
+  // which also works when the page is opened from a file.
+  const ACCESS_DATA = window.__ACCESS_INDEX__ || null;
+  const ACCESS = {};
+  const VEHICLES = { 0: null, 2: "high clearance", 3: "4WD" };
+  if (ACCESS_DATA) {
+    for (const [key, [name, elev, prom, named, opts]] of Object.entries(ACCESS_DATA.peaks)) {
+      ACCESS[key] = {
+        name, elev, prom, named: !!named, loaded: false,
+        options: opts.map(([th, label, total, trail, gain, rt, veh, off]) => ({
+          trailhead: { name: th }, label, total_mi: total, trail_mi: trail,
+          offtrail_mi: Math.round((total - trail) * 10) / 10, gain_ft: gain || null, rt_hours: rt,
+          vehicle: VEHICLES[veh] || null, offtrail_only: !!off,
+        })),
+      };
+    }
+  }
+  const ROAD_WAYS = {};
+  const tileLoads = new Map(); // tile id -> {promise, resolve, reject}
+  function tileOfKey(key) {
+    const [la, lo] = key.split(",").map(Number);
+    return Math.floor(la) + "_" + Math.floor(lo);
+  }
+  window.__accessTile = (tid, payload) => {
+    Object.assign(ROAD_WAYS, payload.ways || {});
+    for (const [key, v] of Object.entries(payload.peaks || {})) {
+      const a = ACCESS[key];
+      if (!a) continue;
+      v.options.forEach((full, i) => { if (a.options[i]) Object.assign(a.options[i], full); });
+      a.loaded = true;
+    }
+    const t = tileLoads.get(tid);
+    if (t) t.resolve();
+  };
+  // Resolves once this peak's full route details are loaded.
+  function ensureAccess(key) {
+    const a = ACCESS[key];
+    if (!a || a.loaded) return Promise.resolve(a);
+    const tid = tileOfKey(key);
+    if (!tileLoads.has(tid)) {
+      const t = {};
+      t.promise = new Promise((res, rej) => { t.resolve = res; t.reject = rej; });
+      tileLoads.set(tid, t);
+      const sc = document.createElement("script");
+      sc.src = "data/access/" + tid + ".js";
+      sc.onerror = () => { tileLoads.delete(tid); t.reject(new Error("could not load " + sc.src)); };
+      document.head.appendChild(sc);
+    }
+    return tileLoads.get(tid).promise.then(() => ACCESS[key]);
+  }
+  const OPTION_COLORS = ["#ff5a1f", "#1f9bff", "#c43bd6"];
+  const routeLayer = L.layerGroup().addTo(map);
+  // Routes, drive roads and their markers draw in their own SVG pane: adding
+  // them to the shared canvas would redraw all ~85k peak dots each time.
+  map.createPane("routes").style.zIndex = 450;
+  const ROUTE_RENDERER = L.svg({ pane: "routes", padding: 0.5 });
+  let shownRoute = null; // {key, which: index or "all"}
+
+  function decodePolyline(str) {
+    const pts = [];
+    let i = 0, la = 0, lo = 0;
+    while (i < str.length) {
+      for (const which of [0, 1]) {
+        let shift = 0, result = 0, b;
+        do { b = str.charCodeAt(i++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+        const d = result & 1 ? ~(result >> 1) : result >> 1;
+        if (which === 0) la += d; else lo += d;
+      }
+      pts.push([la / 1e5, lo / 1e5]);
+    }
+    return pts;
+  }
+  const decoded = new Map();
+  function routePoints(key, i, o) {
+    const k = key + "#" + i;
+    if (!decoded.has(k)) decoded.set(k, decodePolyline(o.route));
+    return decoded.get(k);
+  }
+
+  const mi1 = (x) => Number(x).toFixed(1);
+  // A peak can have several routes from the same trailhead (e.g. Whitney's
+  // Mountaineers Route and main trail); name those by a trail only they use.
+  function routeSuffix(a, o) {
+    if (o.label != null) return o.label; // precomputed by compute_access.py build
+    const same = a.options.filter((x) => x !== o && x.trailhead.name === o.trailhead.name);
+    if (!same.length) return "";
+    const others = new Set(same.flatMap((x) => x.via || []));
+    const own = (o.via || []).find((v) => !others.has(v));
+    return own ? "via " + own : o.offtrail_only ? "(off-trail)" : "(alternate)";
+  }
+  // Vehicle needed for the road to the trailhead (from compute_access.py):
+  // "high clearance" or "4WD", with the miles that need it.
+  function vehicleDetail(o) {
+    if (!o.vehicle) return "";
+    const parts = [];
+    if (o.drive_4wd_mi > 0) parts.push(mi1(o.drive_4wd_mi) + " mi 4WD");
+    if (o.drive_hc_mi > 0) parts.push(mi1(o.drive_hc_mi) + " mi high clearance");
+    return parts.join(" + ");
+  }
+  function vehicleBadge(o) {
+    if (!o.vehicle) return null;
+    const b = el("span", "veh-badge" + (o.vehicle === "4WD" ? " v4wd" : ""), o.vehicle === "4WD" ? "4WD" : "High clearance");
+    const detail = vehicleDetail(o);
+    b.title = "Road to this trailhead needs " + (o.vehicle === "4WD" ? "4WD" : "a high-clearance vehicle") + (detail ? ": " + detail : "");
+    return b;
+  }
+  // Shown with every set of routes: they're machine-made, so check access first.
+  function routeDisclaimer() {
+    const d = el("div", "route-disclaimer", "Auto-generated, not verified: confirm access, closures, permits, and conditions before you go. ");
+    d.appendChild(button("", "More", openAbout));
+    return d;
+  }
+  // Driving directions from wherever the visitor is, in Google Maps.
+  function directionsLink(o) {
+    const link = document.createElement("a");
+    link.className = "dir-link";
+    link.href = "https://www.google.com/maps/dir/?api=1&destination=" + o.trailhead.lat + "," + o.trailhead.lon + "&travelmode=driving";
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = "Directions ↗";
+    link.title = "Driving directions to this trailhead in Google Maps" +
+      (o.vehicle ? " - the last stretch needs " + (o.vehicle === "4WD" ? "4WD" : "high clearance") + "; Google may not route it" : "");
+    return link;
+  }
+  function routeLabel(a, o) {
+    const sfx = routeSuffix(a, o);
+    return o.trailhead.name + (sfx ? " " + sfx : "");
+  }
+  // share of the one-way distance on mapped trail, 0-100
+  const trailPct = (o) => (o.offtrail_only || !(o.total_mi > 0) ? 0 : Math.round((o.trail_mi / o.total_mi) * 100));
+
+  function drawOption(key, i, o) {
+    const pts = routePoints(key, i, o);
+    const color = OPTION_COLORS[i] || OPTION_COLORS[0];
+    const trail = pts.slice(0, o.off_from + 1), off = pts.slice(o.off_from);
+    if (trail.length > 1) L.polyline(trail, { renderer: ROUTE_RENDERER, color, weight: 4, opacity: 0.95, interactive: false }).addTo(routeLayer);
+    if (off.length > 1) L.polyline(off, { renderer: ROUTE_RENDERER, color, weight: 4, opacity: 0.95, dashArray: "1 9", lineCap: "round", interactive: false }).addTo(routeLayer);
+    // Wide invisible line on top: click for this route's elevation profile;
+    // hovering it moves the profile's crosshair.
+    if (pts.length > 1) {
+      L.polyline(pts, { renderer: ROUTE_RENDERER, color: "#000", weight: 18, opacity: 0, interactive: true, bubblingMouseEvents: false })
+        .on("click", () => pickProfile(key, i))
+        .on("mousemove", (ev) => profileHoverFromMap(key, i, ev.latlng))
+        .on("mouseout", () => setProfileHover(null))
+        .addTo(routeLayer);
+    }
+    L.circleMarker([o.trailhead.lat, o.trailhead.lon], { renderer: ROUTE_RENDERER, radius: 7, weight: 3, color: "#fff", fillColor: color, fillOpacity: 1 })
+      .bindTooltip((i + 1) + ". " + routeLabel(ACCESS[key], o), { direction: "top" })
+      .addTo(routeLayer);
+    return pts;
+  }
+
+  // Fit padding that keeps routes clear of the title bar, the list panel (if
+  // open) and the elevation stats panel.
+  function fitPadding() {
+    const tb = document.getElementById("titlebar").offsetHeight;
+    const lp = document.getElementById("listPanel");
+    const st = document.getElementById("stats");
+    return {
+      paddingTopLeft: [lp && !lp.hidden ? lp.offsetLeft + lp.offsetWidth + 30 : 40, tb + 30],
+      // the route legend / elevation profile sits bottom-left over the map
+      paddingBottomRight: [st ? st.offsetWidth + 30 : 40, routeChip && !routeChip.hidden ? routeChip.offsetHeight + 60 : 50],
+      maxZoom: 14,
+    };
+  }
+  // Nearby: one smooth zoom/pan. Far away: a short, gentle flight (a long
+  // zoom-out-and-back arc loads tiles at every level and looks jerky).
+  function fitRoutePoints(pts) {
+    const b = L.latLngBounds(pts);
+    const opts = fitPadding();
+    const pad = L.point(opts.paddingTopLeft).add(opts.paddingBottomRight);
+    const target = Math.min(opts.maxZoom, map.getBoundsZoom(b, false, pad));
+    const dz = Math.abs(target - map.getZoom());
+    if (map.getBounds().pad(0.5).intersects(b) && dz <= 4) {
+      map.fitBounds(b, Object.assign({}, opts, { animate: true, duration: 0.5 }));
+    } else {
+      map.flyToBounds(b, Object.assign({}, opts, { duration: Math.min(1.5, 0.6 + dz * 0.1), easeLinearity: 0.4 }));
+    }
+  }
+
+  function showRoutes(key, which) {
+    ensureAccess(key).then(() => drawRoutes(key, which), (err) => console.error(err));
+  }
+  function drawRoutes(key, which) {
+    const a = ACCESS[key];
+    routeLayer.clearLayers();
+    roadHighlight = null;
+    const drawnRoad = new Set();
+    a.options.forEach((o, i) => { if (which === "all" || which === i) drawRoad(key, i, o, drawnRoad); });
+    const all = [];
+    a.options.forEach((o, i) => { if (which === "all" || which === i) all.push(...drawOption(key, i, o)); });
+    shownRoute = { key, which };
+    profilePick = which === "all" ? (a.options.length === 1 ? 0 : null) : which;
+    setProfileHover(null);
+    raiseMyLayer();
+    map.closePopup();
+    renderRouteChip();
+    fitRoutePoints(all);
+  }
+  function hideRoutes() {
+    routeLayer.clearLayers();
+    roadHighlight = null;
+    shownRoute = null;
+    profilePick = null;
+    setProfileHover(null);
+    renderRouteChip();
+  }
+
+  // Legend for whatever routes are on the map: one line per route (color,
+  // trailhead, round-trip miles, drive); click a line to zoom to that route.
+  const routeChip = document.getElementById("routeChip");
+  L.DomEvent.disableClickPropagation(routeChip);
+  L.DomEvent.disableScrollPropagation(routeChip);
+  function placeRouteChip() {
+    if (PHONE()) { routeChip.style.left = ""; return; } // a full-width sheet (CSS)
+    const lp = document.getElementById("listPanel");
+    routeChip.style.left = (lp && !lp.hidden ? lp.offsetLeft + lp.offsetWidth + 10 : 10) + "px";
+  }
+  function renderRouteChip() {
+    routeChip.textContent = "";
+    profileState = null;
+    if (map.hasLayer(hoverDot)) map.removeLayer(hoverDot);
+    if (!shownRoute) { routeChip.hidden = true; return; }
+    const { key, which } = shownRoute;
+    const a = ACCESS[key];
+    const head = el("div", "route-chip-head");
+    head.appendChild(el("strong", "", a.name));
+    head.appendChild(el("span", "route-chip-sub", which === "all" ? " · " + a.options.length + " routes" : " · route " + (which + 1)));
+    const actions = el("span", "route-chip-actions");
+    const [la, lo] = key.split(",").map(Number);
+    actions.appendChild(button("link-btn", "Peak info", () => {
+      const p = peaks.find((q) => peakKey(q) === key) || { name: a.name, elev: a.elev, prom: a.prom, lat: la, lon: lo };
+      goToPeak(p);
+    }));
+    actions.appendChild(button("link-btn", "Clear", hideRoutes));
+    head.appendChild(actions);
+    routeChip.appendChild(head);
+    a.options.forEach((o, i) => {
+      if (which !== "all" && which !== i) return;
+      const picked = which === "all" && profilePick === i && a.options.length > 1;
+      const line = button("route-chip-line" + (accessFilterOn() && !optionFits(o) ? " no-fit" : "") + (picked ? " picked" : ""), "", () => {
+        fitRoutePoints(routePoints(key, i, o));
+        if (profilePick !== i) pickProfile(key, i);
+      });
+      line.title = "Zoom to this route and show its elevation profile";
+      line.style.setProperty("--c", OPTION_COLORS[i]);
+      line.appendChild(el("span", "access-num", String(i + 1)));
+      line.appendChild(el("span", "route-chip-th", o.trailhead.name));
+      const sfx = routeSuffix(a, o);
+      if (sfx) line.appendChild(el("span", "route-chip-via", sfx));
+      line.title = routeLabel(a, o) + " - zoom to this route and show its elevation profile";
+      const bits = [mi1(o.total_mi * 2) + " mi RT"];
+      if (o.gain_ft) bits.push("+" + o.gain_ft.toLocaleString() + "′");
+      if (o.drive_dirt_mi >= 0.5) bits.push(mi1(o.drive_dirt_mi) + " mi dirt road");
+      line.appendChild(el("span", "route-chip-stats", bits.join(" · ")));
+      const vb = vehicleBadge(o);
+      if (vb) line.appendChild(vb);
+      routeChip.appendChild(line);
+    });
+    const prof = profilePick != null ? buildProfile(key, profilePick) : null;
+    if (prof) routeChip.appendChild(prof);
+    else if (which === "all") routeChip.appendChild(el("div", "route-profile-hint", "Click a route (on the map or above) for its elevation profile and drive road."));
+    routeChip.appendChild(routeDisclaimer());
+    if (profilePick != null) routeChip.appendChild(buildRoadSection(key, profilePick));
+    routeChip.classList.toggle("has-profile", !!prof);
+    placeRouteChip();
+    routeChip.hidden = false;
+  }
+
+  // ---- Drive road: the unpaved stretch from pavement to the trailhead
+  // ("road" in sierra_access.js: [grade, OSM way id, encoded polyline] per
+  // way, in driving order), drawn by grade under the routes. Hover a road for
+  // its name and grade; click it for its OpenStreetMap tags. ----
+  const ROAD_GRADES = {
+    0: { label: "Paved", color: "#9aa5b1", dash: null, note: "a paved stretch along the way" },
+    1: { label: "Graded dirt", color: "#f2c84b", dash: null, note: "unpaved but graded - most cars, slowly" },
+    2: { label: "High clearance", color: "#9a5b13", dash: "10 6", note: "rough or ungraded - needs a high-clearance vehicle" },
+    3: { label: "4WD", color: "#2a1608", dash: "3 6", note: "needs four-wheel drive" },
+  };
+  let roadHighlight = null;
+  const roadCache = new Map();
+
+  function roadSegments(key, i, o) {
+    const ck = key + "#" + i;
+    if (!roadCache.has(ck)) {
+      roadCache.set(ck, (o.road || []).map(([tier, wid, enc]) => {
+        const pts = decodePolyline(enc);
+        let m = 0;
+        for (let k = 1; k < pts.length; k++) m += L.latLng(pts[k - 1]).distanceTo(pts[k]);
+        return { tier, wid, pts, mi: m / 1609.344, tags: ROAD_WAYS[wid] || {} };
+      }));
+    }
+    return roadCache.get(ck);
+  }
+  function roadName(tags) {
+    return tags.name || tags.ref || (tags.highway === "track" ? "Unnamed track" : "Unnamed road");
+  }
+  // which tags put the road in its grade (mirrors road_tier() in compute_access.py)
+  function gradeReason(tags, tier) {
+    const t = [];
+    if (tier === 3) {
+      if (tags["4wd_only"]) t.push("4wd_only=" + tags["4wd_only"]);
+      if (tags.smoothness) t.push("smoothness=" + tags.smoothness);
+    } else if (tier === 2) {
+      if (tags.smoothness === "very_bad") t.push("smoothness=very_bad");
+      if (tags.tracktype) t.push("tracktype=" + tags.tracktype);
+      if (!t.length && tags.highway === "track") t.push("a track with no grade tagged");
+    } else if (tier === 0) {
+      if (tags.surface) t.push("surface=" + tags.surface);
+    } else if (tier === 1) {
+      if (tags.surface) t.push("surface=" + tags.surface);
+      if (tags.tracktype) t.push("tracktype=" + tags.tracktype);
+      if (tags.smoothness) t.push("smoothness=" + tags.smoothness);
+    }
+    return t.join(", ");
+  }
+  function openRoadInfo(sg, latlng) {
+    const g = ROAD_GRADES[sg.tier];
+    const box = el("div", "road-info");
+    box.appendChild(el("h4", "", roadName(sg.tags)));
+    const line = el("div");
+    const sw = el("span", "road-sw"); sw.style.background = g.color;
+    line.appendChild(sw);
+    line.appendChild(el("strong", "", g.label));
+    line.appendChild(document.createTextNode(" · " + mi1(sg.mi) + " mi"));
+    box.appendChild(line);
+    const why = gradeReason(sg.tags, sg.tier);
+    box.appendChild(el("div", "why", g.note.charAt(0).toUpperCase() + g.note.slice(1) + (why ? " (" + why + ")" : "") + "."));
+    const table = el("table");
+    ["highway", "surface", "tracktype", "smoothness", "4wd_only", "access", "motor_vehicle", "ref"].forEach((k) => {
+      if (!sg.tags[k]) return;
+      const tr = el("tr");
+      tr.appendChild(el("td", "", k));
+      tr.appendChild(el("td", "", sg.tags[k]));
+      table.appendChild(tr);
+    });
+    if (table.childNodes.length) box.appendChild(table);
+    const a = document.createElement("a");
+    a.href = "https://www.openstreetmap.org/way/" + encodeURIComponent(sg.wid);
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = "Open in OpenStreetMap";
+    box.appendChild(a);
+    L.popup({ maxWidth: 300, autoPanPaddingTopLeft: POPUP_OPTS.autoPanPaddingTopLeft, autoPanPaddingBottomRight: POPUP_OPTS.autoPanPaddingBottomRight })
+      .setLatLng(latlng).setContent(box).openOn(map);
+  }
+  function drawRoad(key, i, o, drawn) {
+    roadSegments(key, i, o).forEach((sg) => {
+      const id = sg.wid + "|" + sg.pts.length + "|" + sg.pts[0];
+      if (drawn.has(id)) return;
+      drawn.add(id);
+      const g = ROAD_GRADES[sg.tier];
+      L.polyline(sg.pts, { renderer: ROUTE_RENDERER, color: "#fff", weight: 9, opacity: 0.9, interactive: false }).addTo(routeLayer);
+      L.polyline(sg.pts, { renderer: ROUTE_RENDERER, color: g.color, weight: 5, opacity: 1, dashArray: g.dash, lineCap: g.dash ? "butt" : "round", interactive: false }).addTo(routeLayer);
+      L.polyline(sg.pts, { renderer: ROUTE_RENDERER, color: "#000", weight: 16, opacity: 0, interactive: true, bubblingMouseEvents: false })
+        .bindTooltip(roadName(sg.tags) + " · " + g.label + " · " + mi1(sg.mi) + " mi", { sticky: true })
+        .on("click", (ev) => openRoadInfo(sg, ev.latlng))
+        .addTo(routeLayer);
+    });
+  }
+  function highlightRoad(pts) {
+    if (roadHighlight) routeLayer.removeLayer(roadHighlight);
+    roadHighlight = L.polyline(pts, { renderer: ROUTE_RENDERER, color: "#00e5ff", weight: 11, opacity: 0.55, interactive: false }).addTo(routeLayer);
+    roadHighlight.bringToBack();
+  }
+
+  function buildRoadSection(key, i) {
+    const o = ACCESS[key].options[i];
+    const box = el("div", "road-sec");
+    const segs = roadSegments(key, i, o);
+    const head = el("div", "road-head");
+    const title = el("span");
+    title.appendChild(el("strong", "", "Drive road"));
+    head.appendChild(title);
+    const links = el("span", "route-chip-actions");
+    links.appendChild(directionsLink(o));
+    head.appendChild(links);
+    box.appendChild(head);
+    if (!segs.length) {
+      title.appendChild(document.createTextNode(o.offtrail_only ? " · start is on the road" : " · paved road to the trailhead"));
+      return box;
+    }
+    const total = segs.reduce((t, sg) => t + sg.mi, 0);
+    const unpaved = segs.reduce((t, sg) => t + (sg.tier > 0 ? sg.mi : 0), 0);
+    title.appendChild(document.createTextNode(" · " + mi1(total) + " mi from the paved road" +
+      (Math.abs(total - unpaved) >= 0.1 ? " (" + mi1(unpaved) + " unpaved)" : "")));
+    const allPts = segs.flatMap((sg) => sg.pts);
+    links.insertBefore(button("link-btn", "Zoom to road", () => { highlightRoad(allPts); fitRoutePoints(allPts); }), links.firstChild);
+
+    const byTier = { 0: 0, 1: 0, 2: 0, 3: 0 };
+    segs.forEach((sg) => { byTier[sg.tier] += sg.mi; });
+    const bar = el("div", "road-bar");
+    bar.setAttribute("role", "img");
+    bar.setAttribute("aria-label", [0, 1, 2, 3].filter((t) => byTier[t] > 0.05).map((t) => ROAD_GRADES[t].label + " " + mi1(byTier[t]) + " mi").join(", "));
+    segs.forEach((sg) => {
+      const b = el("span");
+      b.style.flex = String(Math.max(sg.mi, 0.001));
+      b.style.background = ROAD_GRADES[sg.tier].color;
+      b.title = roadName(sg.tags) + " · " + ROAD_GRADES[sg.tier].label + " · " + mi1(sg.mi) + " mi";
+      bar.appendChild(b);
+    });
+    box.appendChild(bar);
+    const legend = el("div", "road-legend");
+    [0, 1, 2, 3].forEach((t) => {
+      if (byTier[t] < 0.05) return;
+      const item = el("span");
+      const sw = el("span", "road-sw"); sw.style.background = ROAD_GRADES[t].color;
+      item.appendChild(sw);
+      item.appendChild(document.createTextNode(ROAD_GRADES[t].label + " " + mi1(byTier[t]) + " mi"));
+      legend.appendChild(item);
+    });
+    box.appendChild(legend);
+
+    // one row per road (consecutive pieces of the same road and grade merged)
+    const rows = [];
+    segs.forEach((sg) => {
+      const nm = roadName(sg.tags), last = rows[rows.length - 1];
+      if (last && last.nm === nm && last.tier === sg.tier) { last.mi += sg.mi; last.pts = last.pts.concat(sg.pts); last.segs.push(sg); }
+      else rows.push({ nm, tier: sg.tier, mi: sg.mi, pts: sg.pts.slice(), segs: [sg] });
+    });
+    const list = el("div", "road-rows");
+    rows.forEach((r) => {
+      const g = ROAD_GRADES[r.tier];
+      const row = button("road-row", "", () => {
+        list.querySelectorAll(".road-row.on").forEach((x) => x.classList.remove("on"));
+        row.classList.add("on");
+        highlightRoad(r.pts);
+        fitRoutePoints(r.pts);
+      });
+      row.title = "Zoom to this road - click it on the map for its OpenStreetMap tags";
+      const sw = el("span", "road-sw"); sw.style.background = g.color;
+      row.appendChild(sw);
+      row.appendChild(el("span", "nm", r.nm));
+      row.appendChild(el("span", "gr", g.label));
+      row.appendChild(el("span", "mi", mi1(r.mi) + " mi"));
+      list.appendChild(row);
+    });
+    box.appendChild(list);
+    return box;
+  }
+
+  // ---- Elevation profile for one route (one way, trailhead -> summit).
+  // compute_access.py stores evenly spaced elevations ("prof", ft, delta
+  // encoded) along the route's real geometry and the fraction of that length
+  // where the off-trail leg starts ("prof_split"). The x axis is in the same
+  // miles as the route summary: trail miles, then off-trail at the x1.3
+  // estimate - so the off-trail stretch is drawn proportionally longer. ----
+  let profilePick = null;     // option index whose profile is shown
+  let profileState = null;    // {key, i, xs, ys, lls, setHover}
+  const profileCache = new Map();
+  const hoverDot = L.circleMarker([0, 0], { renderer: ROUTE_RENDERER, radius: 6, weight: 2.5, color: "#fff", fillColor: "#221c12", fillOpacity: 1, interactive: false });
+
+  function decodeValues(str) {
+    const out = [];
+    let i = 0, v = 0;
+    while (i < str.length) {
+      let shift = 0, result = 0, b;
+      do { b = str.charCodeAt(i++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+      v += result & 1 ? ~(result >> 1) : result >> 1;
+      out.push(v);
+    }
+    return out;
+  }
+  // point at fraction t (0..1) of a polyline's length
+  function alongLine(pts, t) {
+    if (pts.length === 1) return L.latLng(pts[0]);
+    const seg = [];
+    let total = 0;
+    for (let k = 1; k < pts.length; k++) { const d = L.latLng(pts[k - 1]).distanceTo(pts[k]); seg.push(d); total += d; }
+    let want = Math.max(0, Math.min(1, t)) * total;
+    for (let k = 0; k < seg.length; k++) {
+      if (want <= seg[k] || k === seg.length - 1) {
+        const f = seg[k] ? Math.min(1, want / seg[k]) : 0;
+        return L.latLng(pts[k][0] + (pts[k + 1][0] - pts[k][0]) * f, pts[k][1] + (pts[k + 1][1] - pts[k][1]) * f);
+      }
+      want -= seg[k];
+    }
+  }
+  function profileData(key, i) {
+    const ck = key + "#" + i;
+    if (profileCache.has(ck)) return profileCache.get(ck);
+    const o = ACCESS[key].options[i];
+    let d = null;
+    if (o.prof) {
+      const ys = decodeValues(o.prof);
+      const n = ys.length;
+      const split = o.offtrail_only ? 0 : Math.max(0, Math.min(1, o.prof_split == null ? 1 : o.prof_split));
+      const pts = routePoints(key, i, o);
+      const trailPts = pts.slice(0, o.off_from + 1), offPts = pts.slice(o.off_from);
+      const xs = [], lls = [];
+      for (let k = 0; k < n; k++) {
+        const f = n > 1 ? k / (n - 1) : 0;
+        if (split > 0 && f <= split) {
+          xs.push((f / split) * o.trail_mi);
+          lls.push(alongLine(trailPts, f / split));
+        } else {
+          const g = split < 1 ? (f - split) / (1 - split) : 1;
+          xs.push((split > 0 ? o.trail_mi : 0) + g * o.offtrail_mi);
+          lls.push(alongLine(offPts, g));
+        }
+      }
+      let splitK = 0;
+      while (splitK < n - 1 && (n > 1 ? (splitK + 1) / (n - 1) : 1) <= split + 1e-9) splitK++;
+      d = { xs, ys, lls, splitK: split > 0 ? splitK : 0, hasTrail: split > 0, hasOff: split < 1 && o.offtrail_mi > 0 };
+    }
+    profileCache.set(ck, d);
+    return d;
+  }
+  function niceStep(range, maxTicks, steps) {
+    for (const s of steps) if (range / s <= maxTicks) return s;
+    return steps[steps.length - 1];
+  }
+
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  function svgEl(tag, attrs, cls) {
+    const e = document.createElementNS(SVG_NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (cls) e.setAttribute("class", cls);
+    return e;
+  }
+
+  function buildProfile(key, i) {
+    const a = ACCESS[key], o = a.options[i];
+    const d = profileData(key, i);
+    const box = el("div", "route-profile");
+    const head = el("div", "route-profile-head");
+    const title = el("span");
+    title.appendChild(el("strong", "", "Elevation profile"));
+    title.appendChild(document.createTextNode(" · route " + (i + 1) + ", one way"));
+    head.appendChild(title);
+    const read = el("span", "route-profile-read");
+    head.appendChild(read);
+    box.appendChild(head);
+    if (!d) { box.appendChild(el("div", "route-profile-hint", "No elevation data for this route.")); profileState = null; return box; }
+
+    const W = 420, H = 150, M = { l: 46, r: 10, t: 8, b: 22 };
+    const pw = W - M.l - M.r, ph = H - M.t - M.b;
+    const xMax = Math.max(0.1, d.xs[d.xs.length - 1]);
+    let yLo = Math.min(...d.ys), yHi = Math.max(...d.ys);
+    const yStep = niceStep(Math.max(200, yHi - yLo), 4, [100, 200, 250, 500, 1000, 2000, 2500, 5000]);
+    yLo = Math.floor(yLo / yStep) * yStep;
+    yHi = Math.max(yLo + yStep, Math.ceil(yHi / yStep) * yStep);
+    const X = (x) => M.l + (x / xMax) * pw, Y = (y) => M.t + ph - ((y - yLo) / (yHi - yLo)) * ph;
+    const color = OPTION_COLORS[i] || OPTION_COLORS[0];
+
+    const svg = svgEl("svg", { viewBox: "0 0 " + W + " " + H, role: "img",
+      "aria-label": "Elevation profile from " + o.trailhead.name + " (" + d.ys[0].toLocaleString() + " ft) to " + a.name + " (" + d.ys[d.ys.length - 1].toLocaleString() + " ft) over " + mi1(xMax) + " miles" });
+    for (let y = yLo; y <= yHi + 1e-6; y += yStep) {
+      svg.appendChild(svgEl("line", { x1: M.l, x2: W - M.r, y1: Y(y), y2: Y(y) }, y === yLo ? "base" : "grid"));
+      const t = svgEl("text", { x: M.l - 5, y: Y(y) + 3.5, "text-anchor": "end" }, "ax");
+      t.textContent = y.toLocaleString() + "′";
+      svg.appendChild(t);
+    }
+    const xStep = niceStep(xMax, 6, [0.1, 0.25, 0.5, 1, 2, 2.5, 5, 10]);
+    for (let x = 0; x <= xMax + 1e-6; x += xStep) {
+      const t = svgEl("text", { x: X(x), y: H - 6, "text-anchor": x === 0 ? "start" : "middle" }, "ax");
+      t.textContent = (Math.round(x * 100) / 100) + (x === 0 ? " mi" : "");
+      svg.appendChild(t);
+    }
+    const pathOf = (k0, k1) => { let s = ""; for (let k = k0; k <= k1; k++) s += (k === k0 ? "M" : "L") + X(d.xs[k]).toFixed(1) + "," + Y(d.ys[k]).toFixed(1); return s; };
+    const n = d.ys.length;
+    svg.appendChild(svgEl("path", { d: pathOf(0, n - 1) + "L" + X(d.xs[n - 1]).toFixed(1) + "," + Y(yLo) + "L" + X(0) + "," + Y(yLo) + "Z", fill: color, "fill-opacity": 0.16, stroke: "none" }));
+    if (d.hasTrail) svg.appendChild(svgEl("path", { d: pathOf(0, d.hasOff ? d.splitK : n - 1), fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round" }));
+    if (d.hasOff) svg.appendChild(svgEl("path", { d: pathOf(d.splitK, n - 1), fill: "none", stroke: color, "stroke-width": 2, "stroke-dasharray": "1.5 4", "stroke-linecap": "round" }));
+
+    const cross = svgEl("line", { y1: M.t, y2: M.t + ph, visibility: "hidden" }, "cross");
+    const dot = svgEl("circle", { r: 4, fill: color, stroke: "#fff", "stroke-width": 1.5, visibility: "hidden" });
+    svg.appendChild(cross);
+    svg.appendChild(dot);
+    const hit = svgEl("rect", { x: M.l, y: 0, width: pw, height: H, fill: "transparent" });
+    svg.appendChild(hit);
+    box.appendChild(svg);
+
+    let hiK = 0;
+    d.ys.forEach((y, k) => { if (y > d.ys[hiK]) hiK = k; });
+    const restText = "start " + d.ys[0].toLocaleString() + "′ · high " + d.ys[hiK].toLocaleString() + "′" + (o.gain_ft ? " · +" + o.gain_ft.toLocaleString() + "′ gain" : "");
+    read.textContent = restText;
+    if (d.hasOff && d.hasTrail) box.appendChild(el("div", "route-profile-key", "Solid = mapped trail · dotted = off-trail (miles at the ×1.3 estimate)"));
+    else if (d.hasOff) box.appendChild(el("div", "route-profile-key", "All off-trail (miles at the ×1.3 estimate)"));
+
+    function setHover(k) {
+      if (k == null) {
+        cross.setAttribute("visibility", "hidden");
+        dot.setAttribute("visibility", "hidden");
+        read.textContent = restText;
+        if (map.hasLayer(hoverDot)) map.removeLayer(hoverDot);
+        return;
+      }
+      const x = X(d.xs[k]), y = Y(d.ys[k]);
+      cross.setAttribute("x1", x); cross.setAttribute("x2", x); cross.setAttribute("visibility", "visible");
+      dot.setAttribute("cx", x); dot.setAttribute("cy", y); dot.setAttribute("visibility", "visible");
+      const off = d.hasOff && k > d.splitK;
+      read.textContent = mi1(d.xs[k]) + " mi · " + d.ys[k].toLocaleString() + "′" + (off ? " · off-trail" : "");
+      hoverDot.setLatLng(d.lls[k]).setStyle({ fillColor: color });
+      if (!map.hasLayer(hoverDot)) hoverDot.addTo(map);
+    }
+    function kAt(clientX) {
+      const r = svg.getBoundingClientRect();
+      const x = ((clientX - r.left) / r.width) * W;
+      const xv = ((x - M.l) / pw) * xMax;
+      let best = 0;
+      d.xs.forEach((v, k) => { if (Math.abs(v - xv) < Math.abs(d.xs[best] - xv)) best = k; });
+      return best;
+    }
+    hit.addEventListener("pointermove", (ev) => setHover(kAt(ev.clientX)));
+    hit.addEventListener("pointerdown", (ev) => setHover(kAt(ev.clientX)));
+    hit.addEventListener("pointerleave", () => setHover(null));
+    profileState = { key, i, d, setHover };
+    return box;
+  }
+
+  function pickProfile(key, i) {
+    if (!shownRoute || shownRoute.key !== key) return;
+    profilePick = i;
+    renderRouteChip();
+  }
+  function setProfileHover(k) {
+    if (profileState) profileState.setHover(k);
+    else if (map.hasLayer(hoverDot)) map.removeLayer(hoverDot);
+  }
+  function profileHoverFromMap(key, i, latlng) {
+    if (!profileState || profileState.key !== key || profileState.i !== i) return;
+    const p0 = map.latLngToLayerPoint(latlng);
+    let best = 0, bd = Infinity;
+    profileState.d.lls.forEach((ll, k) => {
+      const dd = map.latLngToLayerPoint(ll).distanceTo(p0);
+      if (dd < bd) { bd = dd; best = k; }
+    });
+    profileState.setHover(best);
+  }
+
+  function optionSummary(o) {
+    if (o.offtrail_only) return "~" + mi1(o.offtrail_mi * 2) + " mi round trip, off-trail from road";
+    return mi1(o.total_mi * 2) + " mi round trip (" + mi1(o.trail_mi * 2) + " trail + " + mi1(o.offtrail_mi * 2) + " off)";
+  }
+
+  function buildAccessSection(p) {
+    const key = peakKey(p);
+    const a = ACCESS[key];
+    if (!a || !a.options || !a.options.length) return null;
+    const box = el("div", "access");
+    L.DomEvent.disableClickPropagation(box);
+    if (!a.loaded) {
+      // details arrive with this peak's tile; swap them in if the popup is still open
+      box.appendChild(el("div", "access-head")).appendChild(el("span", "mylog-title", "Approaches"));
+      const msg = box.appendChild(el("div", "access-note", "Loading routes…"));
+      ensureAccess(key).then(() => {
+        if (!box.isConnected) return;
+        box.replaceWith(buildAccessSection(p));
+        if (openPopup) openPopup.update();
+      }, () => { msg.textContent = "Couldn't load route details - check your connection and reopen this peak."; });
+      return box;
+    }
+    const head = el("div", "access-head");
+    head.appendChild(el("span", "mylog-title", a.options.length > 1 ? "Approaches (top " + a.options.length + ")" : "Approach"));
+    box.appendChild(head);
+    const allOn = shownRoute && shownRoute.key === key && shownRoute.which === "all";
+    box.appendChild(button("mp-btn show-all-btn", allOn ? "Hide routes" : (a.options.length > 1 ? "Show all " + a.options.length + " routes on map" : "Show route on map"), () => {
+      if (allOn) { hideRoutes(); refreshPopup(p); } else showRoutes(key, "all");
+    }));
+
+    a.options.forEach((o, i) => {
+      const row = el("div", "access-opt" + (accessFilterOn() && !optionFits(o) ? " no-fit" : ""));
+      if (accessFilterOn() && !optionFits(o)) row.title = "Outside your current hike/trail filters";
+      row.style.setProperty("--c", OPTION_COLORS[i]);
+      const top = el("div", "access-opt-top");
+      const name = el("span", "access-th");
+      name.appendChild(el("span", "access-num", String(i + 1)));
+      name.appendChild(el("strong", "", routeLabel(a, o)));
+      const vb = vehicleBadge(o);
+      if (vb) name.appendChild(vb);
+      top.appendChild(name);
+      const on = shownRoute && shownRoute.key === key && shownRoute.which === i;
+      top.appendChild(button("link-btn", on ? "Hide" : "Show", () => {
+        if (on) { hideRoutes(); refreshPopup(p); } else showRoutes(key, i);
+      }));
+      row.appendChild(top);
+
+      const stats = [optionSummary(o)];
+      if (o.gain_ft) stats.push("+" + o.gain_ft.toLocaleString() + "′");
+      stats.push("~" + o.rt_hours + " h RT");
+      row.appendChild(el("div", "access-line", stats.join(" · ")));
+
+      const drive = el("div", "access-links");
+      drive.appendChild(directionsLink(o));
+      const road = [];
+      if (o.drive_dirt_mi >= 0.5) road.push(mi1(o.drive_dirt_mi) + " mi dirt road");
+      if (o.vehicle) road.push("needs " + (o.vehicle === "4WD" ? "4WD" : "high clearance") + " (" + vehicleDetail(o) + ")");
+      if (road.length) drive.appendChild(document.createTextNode(" · " + road.join(", ")));
+      row.appendChild(drive);
+      const sub = [];
+      if (o.trailhead.elev_ft) sub.push("TH " + o.trailhead.elev_ft.toLocaleString() + "′");
+      if (o.via && o.via.length) sub.push("via " + o.via.slice(0, 2).join(", "));
+      if (sub.length) row.appendChild(el("div", "access-sub", sub.join(" · ")));
+      box.appendChild(row);
+    });
+    box.appendChild(el("div", "access-note",
+      "Shortest mapped path (solid; can follow a climbers' route) + straight-line off-trail ×1.3 (dotted)."));
+    box.appendChild(routeDisclaimer());
+    return box;
+  }
+
+  // ---- Peak list: every peak with approach data, sortable and filterable;
+  // click a row to fly to the peak and open its popup. ----
+  // ---- About & disclaimer: opens from the title bar, and once on a first visit ----
+  const aboutDialog = document.getElementById("aboutDialog");
+  function openAbout() { if (!aboutDialog.open) aboutDialog.showModal(); }
+  function closeAbout() {
+    aboutDialog.close();
+    try { localStorage.setItem("aboutSeen", "1"); } catch (e) { /* storage blocked: it just shows again next visit */ }
+  }
+  document.getElementById("aboutBtn").onclick = openAbout;
+  document.getElementById("aboutClose").onclick = closeAbout;
+  document.getElementById("aboutOk").onclick = closeAbout;
+  aboutDialog.addEventListener("cancel", () => { try { localStorage.setItem("aboutSeen", "1"); } catch (e) { /* ignore */ } });
+  let aboutSeen = false;
+  try { aboutSeen = localStorage.getItem("aboutSeen") === "1"; } catch (e) { /* ignore */ }
+  if (!aboutSeen) openAbout();
+
+  const listPanel = document.getElementById("listPanel");
+  const listBody = document.getElementById("listBody");
+  const listFilter = document.getElementById("listFilter");
+  const listCount = document.getElementById("listCount");
+  const listToggle = document.getElementById("listToggle");
+  const listScope = document.getElementById("listScope");
+  const peakByKey = new Map();
+  let listSort = { col: "elev", dir: -1 };
+  const LIST_COLS = [
+    { id: "name", label: "Peak", get: (r) => r.name, text: true },
+    { id: "elev", label: "Elev", get: (r) => r.elev, fmt: (v) => v.toLocaleString() + "′" },
+    { id: "prom", label: "Prom", get: (r) => r.prom, fmt: (v) => v.toLocaleString() + "′" },
+    { id: "th", label: "Best trailhead", get: (r) => routeLabel(ACCESS[r.key], r.best), text: true },
+    { id: "mi", label: "Mi (RT)", get: (r) => r.best.total_mi * 2, fmt: mi1 },
+    { id: "trail", label: "Trail", get: (r) => trailPct(r.best), fmt: (v) => v + "%", title: "Share of the route on mapped trail" },
+    { id: "gain", label: "Gain", get: (r) => r.best.gain_ft, fmt: (v) => v == null ? "—" : "+" + v.toLocaleString() + "′" },
+    { id: "rt", label: "RT h", get: (r) => r.best.rt_hours, fmt: (v) => String(v) },
+    { id: "road", label: "Road", get: (r) => ({ "high clearance": 2, "4WD": 3 })[r.best.vehicle] || 0, fmt: () => "", title: "Vehicle the road to the trailhead needs" },
+    { id: "n", label: "#", get: (r) => r.nFit, fmt: (v) => String(v), title: "Approaches that fit the current filters (of up to 3)" },
+  ];
+
+  function listRows() {
+    const q = norm(listFilter.value || "");
+    const onlyMine = listScope.value === "mine";
+
+    const inView = listScope.value === "view" ? map.getBounds() : null;
+    const rows = [];
+    Object.entries(ACCESS).forEach(([key, a]) => {
+      if (!a.options || !a.options.length) return;
+      if (q && !norm(a.name).includes(q) && !a.options.some((o) => norm(o.trailhead.name).includes(q))) return;
+      const st = statusOf(myLog.peaks[key]);
+      if (onlyMine && !st) return;
+      if (a.elev < minElev || (a.prom < minProm && minProm > promFloor)) return; // at the floor, one-off peaks below it stay
+      if (landSel && !landOk(ownOfKey(key))) return;
+      if (!accessPasses(a)) return;
+      const [la, lo] = key.split(",").map(Number);
+      if (inView && !inView.contains([la, lo])) return;
+      const fit = fittingOptions(a);
+      rows.push({ key, name: a.name, elev: a.elev, prom: a.prom, best: fit[0] || a.options[0], options: a.options, nFit: fit.length, status: st, lat: la, lon: lo });
+    });
+    const col = LIST_COLS.find((c) => c.id === listSort.col);
+    rows.sort((x, y) => {
+      const vx = col.get(x), vy = col.get(y);
+      if (vx == null && vy == null) return 0;
+      if (vx == null) return 1;
+      if (vy == null) return -1;
+      return (col.text ? String(vx).localeCompare(String(vy)) : vx - vy) * listSort.dir;
+    });
+    return rows;
+  }
+
+  const LIST_MAX = 500;
+  function renderList() {
+    if (listPanel.hidden) return;
+    const rows = listRows();
+    // Drawing tens of thousands of rows is slow (phones especially): show the
+    // first LIST_MAX in the current sort; filters narrow it down.
+    const shown = rows.slice(0, LIST_MAX);
+    listCount.textContent = rows.length.toLocaleString() + " of " + Object.keys(ACCESS).length.toLocaleString() + " peaks" +
+      (rows.length > shown.length ? " · showing the first " + shown.length.toLocaleString() + " (sort or filter to see others)" : "");
+    const thead = document.getElementById("listHead");
+    thead.textContent = "";
+    const tr = el("tr");
+    LIST_COLS.forEach((c) => {
+      const th = el("th", c.text ? "" : "num", c.label + (listSort.col === c.id ? (listSort.dir > 0 ? " ▲" : " ▼") : ""));
+      if (c.title) th.title = c.title;
+      th.setAttribute("aria-sort", listSort.col === c.id ? (listSort.dir > 0 ? "ascending" : "descending") : "none");
+      th.onclick = () => {
+        listSort = listSort.col === c.id ? { col: c.id, dir: -listSort.dir } : { col: c.id, dir: c.text ? 1 : -1 };
+        renderList();
+      };
+      tr.appendChild(th);
+    });
+    tr.appendChild(el("th", "", ""));
+    thead.appendChild(tr);
+    listBody.textContent = "";
+    const frag = document.createDocumentFragment();
+    shown.forEach((r) => {
+      const row = el("tr");
+      row.tabIndex = 0;
+      LIST_COLS.forEach((c) => {
+        const v = c.get(r);
+        const td = el("td", c.text ? "" : "num", c.fmt ? c.fmt(v) : (v == null ? "—" : String(v)));
+        if (c.id === "name") {
+          td.textContent = "";
+          if (r.status) {
+            const dot = el("span", "list-dot", "●");
+            dot.style.color = STATUS[r.status].color;
+            dot.title = STATUS[r.status].label;
+            td.appendChild(dot);
+          }
+          td.appendChild(document.createTextNode(r.name));
+        }
+        if (c.id === "road") {
+          const vb = vehicleBadge(r.best);
+          if (vb) td.appendChild(vb);
+          else td.appendChild(el("span", "list-car", "Car"));
+          td.className = "";
+        }
+        row.appendChild(td);
+      });
+      const routesTd = el("td", "routes-cell");
+      const rb = button("mp-btn list-routes-btn", "Routes", (ev) => { ev.stopPropagation(); if (PHONE()) setListOpen(false); showRoutes(r.key, "all"); });
+      rb.title = "Show all of this peak's routes on the map";
+      routesTd.appendChild(rb);
+      row.appendChild(routesTd);
+      const go = () => {
+        const p = peakByKey.get(r.key) || { name: r.name, elev: r.elev, prom: r.prom, lat: r.lat, lon: r.lon };
+        if (PHONE()) setListOpen(false);
+        goToPeak(p);
+      };
+      row.onclick = go;
+      row.onkeydown = (ev) => { if (ev.key === "Enter") go(); };
+      frag.appendChild(row);
+    });
+    listBody.appendChild(frag);
+  }
+
+  let listRenderTimer = null;
+  function scheduleListRender() {
+    if (listPanel.hidden) return;
+    clearTimeout(listRenderTimer);
+    listRenderTimer = setTimeout(renderList, 80);
+  }
+
+  function setListOpen(open) {
+    listPanel.hidden = !open;
+    listToggle.setAttribute("aria-expanded", String(open));
+    listToggle.textContent = open ? "Hide list" : "Peak list";
+    updateInsets();
+    if (!routeChip.hidden) placeRouteChip();
+    if (open) {
+      if (!peakByKey.size) peaks.forEach((p) => { const k = peakKey(p); if (ACCESS[k]) peakByKey.set(k, p); });
+      renderList();
+    }
+  }
+  // The title bar's height changes as controls wrap (and the list panel sits
+  // over the map's left side), so keep the panel below the title bar and give
+  // popups auto-pan padding that clears both. Popups share POPUP_OPTS'
+  // padding arrays by reference, so updating them in place reaches every
+  // popup, including ones already bound to markers.
+  const titlebarEl = document.getElementById("titlebar");
+  function updateInsets() {
+    const top = titlebarEl.offsetHeight;
+    listPanel.style.top = top + 8 + "px";
+    POPUP_OPTS.autoPanPaddingTopLeft[1] = top + 15;
+    POPUP_OPTS.autoPanPaddingTopLeft[0] = listPanel.hidden ? 20 : listPanel.offsetLeft + listPanel.offsetWidth + 15;
+    const statsEl = document.getElementById("stats");
+    POPUP_OPTS.autoPanPaddingBottomRight[0] = statsEl ? statsEl.offsetWidth + 25 : 20;
+  }
+  new ResizeObserver(updateInsets).observe(titlebarEl);
+  window.addEventListener("resize", updateInsets);
+
+  if (Object.keys(ACCESS).length) {
+    listToggle.hidden = false;
+    listToggle.onclick = () => setListOpen(listPanel.hidden);
+    let listTimer = null;
+    listFilter.addEventListener("input", () => { clearTimeout(listTimer); listTimer = setTimeout(renderList, 120); });
+    listScope.onchange = renderList;
+    map.on("moveend", () => { if (listScope.value === "view") renderList(); });
+    document.getElementById("listClose").onclick = () => setListOpen(false);
+    L.DomEvent.disableClickPropagation(listPanel);
+    L.DomEvent.disableScrollPropagation(listPanel);
+  }
+
+  // ---- Skeleton Score: your 0-10 rating of a peak, shown as ten cartoon
+  // skeletons with the first N lit. Click the Nth to set N; click the lit
+  // top one again to clear. ----
+  const SKELETON_SVG =
+    '<svg viewBox="0 0 20 32" aria-hidden="true">' +
+    '<path class="bone" d="M10 1.4a4.9 4.9 0 0 1 4.9 4.9c0 1.8-.9 3-1.9 3.5v1.4H7V9.8C6 9.3 5.1 8.1 5.1 6.3A4.9 4.9 0 0 1 10 1.4z"/>' +
+    '<circle class="hole" cx="8.2" cy="6.2" r="1.15"/><circle class="hole" cx="11.8" cy="6.2" r="1.15"/>' +
+    '<path class="line" d="M9 9.9v1.2M11 9.9v1.2M10 11.3v10M6.6 13.6q3.4 1.6 6.8 0M6.9 15.9q3.1 1.3 6.2 0M7.4 18.1q2.6 1 5.2 0' +
+    'M7.2 12.6 4.4 17.2 3.4 20.8M12.8 12.6 15.6 17.2 16.6 20.8M8.6 23.6 7.7 27.6 7.2 30.4 5.3 30.6M11.4 23.6 12.3 27.6 12.8 30.4 14.7 30.6"/>' +
+    '<path class="bone" d="M7.3 21.3h5.4l-1.1 2.3H8.4z"/>' +
+    "</svg>";
+
+  function buildSkeletonSection(p) {
+    const box = el("div", "skel");
+    L.DomEvent.disableClickPropagation(box);
+    const head = el("div", "skel-head");
+    const title = el("span", "mylog-title", "Skeleton score");
+    const info = el("span", "info-tip", "i");
+    info.tabIndex = 0;
+    info.dataset.tip = "Amount of suffering or how heinous";
+    info.title = info.dataset.tip;
+    info.setAttribute("role", "img");
+    info.setAttribute("aria-label", "About the Skeleton score: " + info.dataset.tip);
+    title.appendChild(info);
+    const value = el("span", "skel-value");
+    head.append(title, value);
+    box.appendChild(head);
+    const row = el("div", "skel-row");
+    row.setAttribute("role", "radiogroup");
+    row.setAttribute("aria-label", "Skeleton score out of 10");
+    box.appendChild(row);
+
+    const current = () => (myLog.peaks[peakKey(p)] || {}).skeleton || 0;
+    const canEdit = !!dirHandle;
+    const icons = [];
+    for (let i = 1; i <= 10; i++) {
+      const b = el("button", "skel-btn");
+      b.type = "button";
+      b.innerHTML = SKELETON_SVG;
+      b.title = canEdit ? i + " / 10" : (fsSupported ? "Choose a folder for your log to score" : "My Peaks works in Chrome or Edge on a computer");
+      b.setAttribute("role", "radio");
+      b.setAttribute("aria-label", i + " out of 10");
+      b.disabled = !canEdit;
+      b.onmouseenter = () => paint(i);
+      b.onfocus = () => paint(i);
+      b.onclick = () => {
+        const next = current() === i ? 0 : i;
+        if (next) ensureEntryFor(p).skeleton = next;
+        else if (myLog.peaks[peakKey(p)]) { delete myLog.peaks[peakKey(p)].skeleton; pruneEntryFor(p); }
+        paint(0);
+        renderMyStatus();
+        scheduleSave();
+      };
+      icons.push(b);
+      row.appendChild(b);
+    }
+    row.onmouseleave = () => paint(0);
+    row.addEventListener("focusout", () => paint(0));
+
+    // preview > 0 shows a hover preview; 0 shows the saved score
+    function paint(preview) {
+      const score = current();
+      const shown = preview || score;
+      icons.forEach((b, idx) => {
+        b.classList.toggle("lit", idx < shown);
+        b.classList.toggle("preview", !!preview && idx < preview);
+        b.setAttribute("aria-checked", String(idx + 1 === score));
+      });
+      value.textContent = (preview ? preview : score) + " / 10";
+      value.classList.toggle("unset", !preview && !score);
+    }
+    paint(0);
+    return box;
+  }
+
+  function buildLogSection(p) {
+    const box = el("div", "mylog");
+    L.DomEvent.disableClickPropagation(box);
+    L.DomEvent.disableScrollPropagation(box);
+    box.appendChild(el("div", "mylog-title", "My log"));
+    if (!fsSupported) {
+      box.appendChild(el("div", "hint", "My Peaks works in Chrome or Edge on a computer: it saves your log to a folder you choose."));
+      return box;
+    }
+    if (!dirHandle) {
+      box.appendChild(button("mp-btn", "Choose a folder to log this peak", async () => {
+        await connectFolder(!myConnectBtn.textContent.startsWith("Reconnect"));
+        if (dirHandle) refreshPopup(p);
+      }));
+      return box;
+    }
+
+    const key = peakKey(p);
+    const entry = () => myLog.peaks[key];
+    const ensureEntry = () => ensureEntryFor(p);
+    const pruneEntry = () => pruneEntryFor(p);
+
+    function rebuild() {
+      box.replaceWith(buildLogSection(p));
+      if (openPopup) openPopup.update();
+    }
+    // Structural change (add/remove ascent, outcome, photos, GPX, want):
+    // redraw markers/tracks, save, and rebuild this section.
+    function commitAndRebuild() {
+      pruneEntry();
+      renderMyLayer();
+      renderTracks();
+      renderMyStatus();
+      scheduleSave();
+      rebuild();
+    }
+    // Text edits (date, notes): save without rebuilding so focus stays put.
+    function commitQuiet() {
+      renderMyStatus();
+      scheduleSave();
+    }
+
+    const e = entry();
+    const ascents = (e && e.ascents) || [];
+
+    const head = el("div", "log-head");
+    const nClimb = ascents.filter((a) => a.outcome === "climbed").length;
+    const nAtt = ascents.length - nClimb;
+    const summary = [nClimb ? "Climbed " + nClimb + "×" : "", nAtt ? "Attempted " + nAtt + "×" : ""].filter(Boolean).join(" · ");
+    head.appendChild(el("span", "log-summary", summary || "Not logged yet"));
+    const wantOn = !!(e && e.want);
+    const wantBtn = button("status-btn" + (wantOn ? " on" : ""), (wantOn ? "★ " : "☆ ") + "Want to", () => {
+      ensureEntry().want = !wantOn;
+      commitAndRebuild();
+    });
+    wantBtn.style.setProperty("--c", STATUS.want.color);
+    head.appendChild(wantBtn);
+    box.appendChild(head);
+
+    const sorted = ascents.slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    sorted.forEach((a) => box.appendChild(buildAscentCard(a)));
+
+    const addRow = el("div", "status-row");
+    ["climbed", "attempted"].forEach((outcome) => {
+      const b = button("status-btn", "+ Log " + (outcome === "climbed" ? "climb" : "attempt"), () => {
+        ensureEntry().ascents.push({ id: newId(), outcome, date: new Date().toISOString().slice(0, 10), notes: "", photos: [], gpx: null });
+        commitAndRebuild();
+      });
+      b.style.setProperty("--c", STATUS[outcome].color);
+      addRow.appendChild(b);
+    });
+    box.appendChild(addRow);
+    return box;
+
+    function buildAscentCard(a) {
+      const card = el("div", "ascent");
+      card.style.setProperty("--c", STATUS[a.outcome].color);
+
+      const top = el("div", "ascent-top");
+      ["climbed", "attempted"].forEach((outcome) => {
+        const b = button("status-btn small" + (a.outcome === outcome ? " on" : ""), STATUS[outcome].label, () => {
+          if (a.outcome === outcome) return;
+          a.outcome = outcome;
+          ensureEntry();
+          commitAndRebuild();
+        });
+        b.style.setProperty("--c", STATUS[outcome].color);
+        top.appendChild(b);
+      });
+      const date = el("input");
+      date.type = "date";
+      date.value = a.date || "";
+      date.onchange = () => { a.date = date.value; ensureEntry(); commitQuiet(); };
+      top.appendChild(date);
+      let armed = false;
+      const del = button("link-btn danger", "Remove", () => {
+        if (!armed) { armed = true; del.textContent = "Confirm?"; setTimeout(() => { armed = false; del.textContent = "Remove"; }, 3000); return; }
+        const list = ensureEntry().ascents;
+        list.splice(list.indexOf(a), 1);
+        commitAndRebuild();
+      });
+      del.title = "Removes this entry from the log; its photos and GPX file stay in the folder";
+      top.appendChild(del);
+      card.appendChild(top);
+
+      const notes = el("textarea");
+      notes.placeholder = "Route, partners, conditions…";
+      notes.value = a.notes || "";
+      notes.oninput = () => { a.notes = notes.value; ensureEntry(); commitQuiet(); };
+      card.appendChild(notes);
+
+      const photos = el("div", "photos");
+      card.appendChild(photos);
+      (a.photos || []).forEach(async (path) => {
+        const slot = el("span");
+        photos.appendChild(slot);
+        try {
+          const url = URL.createObjectURL(await getFile(path));
+          const img = el("img");
+          img.src = url;
+          img.alt = path.split("/").pop();
+          img.onclick = () => window.open(url, "_blank");
+          slot.replaceWith(img);
+        } catch (err) {
+          slot.replaceWith(el("span", "hint", "missing: " + path.split("/").pop()));
+        }
+      });
+
+      const actions = el("div", "ascent-actions");
+      actions.appendChild(fileButton("Add photos", "image/*", true, async (files) => {
+        for (const f of files) {
+          try { (a.photos = a.photos || []).push(await saveFile(PHOTO_DIR, key, f)); }
+          catch (err) { saveNote = "photo save failed: " + err.message; }
+        }
+        ensureEntry();
+        commitAndRebuild();
+      }));
+
+      if (a.gpx) {
+        const info = el("span", "gpx-info", "GPX: " + a.gpx.split("/").pop().replace(/^\d+-/, ""));
+        actions.appendChild(info);
+        loadTrack(a.gpx).then((t) => {
+          info.textContent += " · " + t.miles.toFixed(1) + " mi" + (t.gainFt ? " · +" + Math.round(t.gainFt).toLocaleString() + "′" : "");
+        }).catch((err) => { info.textContent += " (couldn't read: " + err.message + ")"; });
+        actions.appendChild(button("link-btn", "Zoom to track", () => {
+          const line = trackLines.get(a.id);
+          if (!line) return;
+          map.closePopup();
+          map.flyToBounds(line.getBounds(), { padding: [60, 60], maxZoom: 15 });
+        }));
+        actions.appendChild(button("link-btn danger", "Remove track", () => { a.gpx = null; ensureEntry(); commitAndRebuild(); }));
+      } else {
+        actions.appendChild(fileButton("Add GPX", ".gpx,application/gpx+xml", false, async ([f]) => {
+          try {
+            parseGpx(await f.text()); // validate before saving
+            a.gpx = await saveFile(GPX_DIR, key, f);
+          } catch (err) {
+            saveNote = "GPX not added: " + err.message;
+          }
+          ensureEntry();
+          commitAndRebuild();
+        }));
+      }
+      card.appendChild(actions);
+      return card;
+    }
+  }
+
+  // ---- search by peak name ----
+  // Opens a standalone popup at the peak (rather than the peak's own marker's
+  // popup) so it works even when that marker is hidden by the sliders or by
+  // "Only my peaks".
+  const searchIn = document.getElementById("peakSearch");
+  const searchOut = document.getElementById("searchResults");
+  const SEARCH_LIMIT = 15;
+  const norm = (s) => s.toLowerCase().replace(/\bmt\.?(?=\s|$)/g, "mount").replace(/\bpk\.?(?=\s|$)/g, "peak").replace(/\s+/g, " ").trim();
+  let searchHits = [], activeHit = -1, searchTimer = null;
+  const highlight = L.circleMarker([0, 0], { radius: 13, weight: 3, color: "#fff", fill: false, interactive: false });
+
+  function runSearch() {
+    const q = norm(searchIn.value);
+    searchHits = [];
+    activeHit = -1;
+    if (q.length < 2) { closeResults(); return; }
+    const seen = new Set();
+    const scored = [];
+    const consider = (p) => {
+      const key = peakKey(p);
+      if (seen.has(key)) return;
+      const n = norm(p.name);
+      const i = n.indexOf(q);
+      if (i < 0) return;
+      seen.add(key);
+      const rank = i === 0 ? 0 : n[i - 1] === " " ? 1 : 2;
+      scored.push({ p, rank: rank + (p.named === false ? 3 : 0) });
+    };
+    Object.values(myLog.peaks).forEach(consider);
+    peaks.forEach(consider);
+    scored.sort((a, b) => a.rank - b.rank || b.p.elev - a.p.elev);
+    searchHits = scored.slice(0, SEARCH_LIMIT).map((s) => s.p);
+    renderResults(scored.length);
+  }
+
+  function renderResults(total) {
+    searchOut.textContent = "";
+    if (!searchHits.length) {
+      searchOut.appendChild(el("div", "empty", "No peaks match" + (extraLoaded || !EXTRA_PEAKS_OK ? "" : " (drag Min Prom below 250′ to include smaller peaks)")));
+    }
+    searchHits.forEach((p, idx) => {
+      const opt = el("div", "opt" + (p.named === false ? " unnamed" : "") + (idx === activeHit ? " active" : ""));
+      opt.setAttribute("role", "option");
+      const st = statusOf(myLog.peaks[peakKey(p)]);
+      opt.append(
+        el("span", "nm", (st ? "● " : "") + p.name),
+        el("span", "sub", p.elev.toLocaleString() + "′ · " + (p.state || ""))
+      );
+      if (st) opt.firstChild.style.color = STATUS[st].color;
+      opt.onmousedown = (ev) => { ev.preventDefault(); goToPeak(p); };
+      searchOut.appendChild(opt);
+    });
+    if (total > searchHits.length) searchOut.appendChild(el("div", "empty", (total - searchHits.length).toLocaleString() + " more — keep typing"));
+    searchOut.hidden = false;
+    searchIn.setAttribute("aria-expanded", "true");
+  }
+
+  function closeResults() {
+    searchOut.hidden = true;
+    searchIn.setAttribute("aria-expanded", "false");
+  }
+
+  function goToPeak(p) {
+    closeResults();
+    searchIn.value = p.name;
+    searchIn.blur();
+    const ll = [p.lat, p.lon];
+    let opened = false;
+    const open = () => {
+      if (opened) return;
+      opened = true;
+      const popup = L.popup(POPUP_OPTS).setLatLng(ll).setContent(buildPopup(p)).openOn(map);
+      highlight.setLatLng(ll).addTo(map); // after openOn: closing the previous popup removes the ring
+      popup.on("remove", () => { if (highlight.getLatLng().equals(L.latLng(ll))) map.removeLayer(highlight); });
+    };
+    map.once("moveend", open);
+    setTimeout(open, 1600); // flyTo to the current view may not fire moveend
+    const zoom = Math.max(map.getZoom(), 12);
+    let target = L.latLng(ll);
+    const panel = document.getElementById("listPanel");
+    if (panel && !panel.hidden) {
+      // center the peak in the strip between the list panel and the stats panel
+      const w = map.getSize().x;
+      const stats = document.getElementById("stats");
+      const left = panel.offsetLeft + panel.offsetWidth;
+      const right = w - (stats ? stats.offsetWidth + 10 : 0);
+      const shift = (left + right) / 2 - w / 2;
+      target = map.unproject(map.project(target, zoom).subtract([shift, 0]), zoom);
+    }
+    map.flyTo(target, zoom, { duration: 1.2 });
+  }
+
+  searchIn.addEventListener("input", () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(runSearch, 120);
+  });
+  searchIn.addEventListener("focus", () => { if (searchIn.value) runSearch(); });
+  searchIn.addEventListener("blur", () => setTimeout(closeResults, 150));
+  searchIn.addEventListener("keydown", (ev) => {
+    if (searchOut.hidden && ev.key !== "Enter") return;
+    if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+      ev.preventDefault();
+      if (!searchHits.length) return;
+      activeHit = (activeHit + (ev.key === "ArrowDown" ? 1 : -1) + searchHits.length) % searchHits.length;
+      renderResults(searchHits.length);
+    } else if (ev.key === "Enter") {
+      ev.preventDefault();
+      clearTimeout(searchTimer);
+      if (searchOut.hidden || !searchHits.length) runSearch();
+      const p = searchHits[activeHit >= 0 ? activeHit : 0];
+      if (p) goToPeak(p);
+    } else if (ev.key === "Escape") {
+      closeResults();
+    }
+  });
+  L.DomEvent.disableClickPropagation(searchOut);
+  L.DomEvent.disableScrollPropagation(searchOut);
+
+  myConnectBtn.onclick = () => connectFolder(!myConnectBtn.textContent.startsWith("Reconnect"));
+  myShowSel.onchange = setShowMode;
+  try {
+    const saved = localStorage.getItem("myShow");
+    if (saved && [...myShowSel.options].some((o) => o.value === saved) && saved !== "all") { myShowSel.value = saved; setShowMode(); }
+  } catch (e) { /* ignore */ }
+  myTracksChk.onchange = () => {
+    if (myTracksChk.checked) { trackLayer.addTo(map); raiseMyLayer(); }
+    else map.removeLayer(trackLayer);
+  };
+  renderMyStatus();
+  restoreFolder();
+
+  // ---- base map picker ----
+  const mapSelect = document.getElementById("mapSelect");
+  mapSelect.addEventListener("change", () => {
+    map.removeLayer(activeBase);
+    activeBase = baseLayers[mapSelect.value];
+    activeBase.addTo(map);
+  });
+
+  // ---- land ownership overlay: BLM's national Surface Management Agency map
+  // (transparent where land is private or unknown), tinted over any base map ----
+  const ownership = L.tileLayer(
+    "https://gis.blm.gov/arcgis/rest/services/lands/BLM_Natl_SMA_Cached_without_PriUnk/MapServer/tile/{z}/{y}/{x}", {
+      opacity: 0.55, zIndex: 5, maxZoom: 19, updateWhenZooming: false, maxNativeZoom: 14, // the BLM cache stops at zoom 14
+      attribution: 'Land ownership: <a href="https://www.blm.gov/services/geospatial" target="_blank" rel="noopener">BLM Surface Management Agency</a>',
+    });
+  const ownershipToggle = document.getElementById("ownershipToggle");
+  const ownershipLegend = document.getElementById("ownershipLegend");
+  function setOwnership(on) {
+    ownershipToggle.checked = on;
+    ownershipLegend.hidden = !on;
+    if (on) ownership.addTo(map); else map.removeLayer(ownership);
+    try { localStorage.setItem("ownershipLayer", on ? "1" : "0"); } catch (e) { /* storage blocked: just not remembered */ }
+  }
+  ownershipToggle.addEventListener("change", () => setOwnership(ownershipToggle.checked));
+  // a map control in the bottom-right corner, stacked above the peak count
+  const ownershipControl = L.control({ position: "bottomright" });
+  ownershipControl.onAdd = () => ownershipLegend; // added after the stats panel, below
+  L.DomEvent.disableClickPropagation(ownershipLegend);
+  try { if (localStorage.getItem("ownershipLayer") === "1") setOwnership(true); } catch (e) { /* ignore */ }
+
+  // ---- elevation / prominence sliders (reveal or hide peaks) ----
+  const elevSlider = document.getElementById("elevSlider");
+  const promSlider = document.getElementById("promSlider");
+  const elevValueEl = document.getElementById("elevValue");
+  const promValueEl = document.getElementById("promValue");
+  const extraStatusEl = document.getElementById("extraStatus");
+
+  elevSlider.min = elevFloor;
+  elevSlider.max = elevCeil;
+  elevSlider.step = 100;
+  elevSlider.value = minElev;
+  elevValueEl.textContent = formatFt(minElev);
+
+  // The main dataset only ships peaks down to 300' prominence (see
+  // MAIN_PROM_FLOOR above); the slider's own range goes all the way to
+  // 100' so the 100'-300' tier is reachable, it just triggers a lazy
+  // load of sierra_classified_extra.js the first time you cross below 300'.
+  promSlider.min = EXTRA_PEAKS_OK ? 100 : MAIN_PROM_FLOOR;
+  promSlider.max = Math.min(promCeil, 5000); // most peaks cluster well under 5,000' prom; cap the slider there for usable resolution
+  promSlider.step = 50;
+  promSlider.value = minProm;
+  function formatProm(n) { return n >= promSlider.max ? formatFt(promSlider.max) + "+" : formatFt(n); }
+  promValueEl.textContent = formatProm(minProm);
+
+  elevSlider.addEventListener("input", () => {
+    minElev = Number(elevSlider.value);
+    elevValueEl.textContent = formatFt(minElev);
+    applySelection();
+    scheduleListRender();
+  });
+  promSlider.addEventListener("input", () => {
+    minProm = Number(promSlider.value);
+    promValueEl.textContent = formatProm(minProm);
+    if (minProm < MAIN_PROM_FLOOR) ensureExtraPeaksLoaded(applySelection);
+    applySelection();
+    scheduleListRender();
+  });
+
+  // ---- hike + drive filters, applied per approach: a peak shows if at
+  // least one of its approaches fits every active limit (round-trip hike
+  // range AND one-way drive), and the list shows that fitting approach. The
+  // data stores one-way legs; the map doubles them for round trip. When any
+  // filter is on, only peaks with approach data can pass. Slider at its far
+  // end = "any" (no limit). ----
+  const rt = (oneWayMi) => oneWayMi * 2;
+  let minHike = 0;
+  let maxHike = null;   // round-trip miles; null = no limit
+  let minTrailPct = 0;   // minimum % of one-way distance on mapped trail; 0 = no limit
+  const hikeSlider = document.getElementById("hikeSlider");
+  const hikeValueEl = document.getElementById("hikeValue");
+  const hikeMaxSlider = document.getElementById("hikeMaxSlider");
+  const hikeMaxValueEl = document.getElementById("hikeMaxValue");
+  const trailSlider = document.getElementById("trailSlider");
+  const trailValueEl = document.getElementById("trailValue");
+  const HIKE_SLIDER_MAX = Number(hikeMaxSlider.max);
+
+  function hikeFilterOn() { return !!minHike || maxHike !== null; }
+  function accessFilterOn() { return hikeFilterOn() || minTrailPct > 0; }
+  function optionFits(o) {
+    const mi = rt(o.total_mi);
+    if (mi < minHike || (maxHike !== null && mi > maxHike)) return false;
+    if (minTrailPct > 0 && trailPct(o) < minTrailPct) return false;
+    return true;
+  }
+  // a = ACCESS entry (or undefined); options are already in best-first order
+  function fittingOptions(a) {
+    if (!a || !a.options) return [];
+    return accessFilterOn() ? a.options.filter(optionFits) : a.options;
+  }
+  function accessPasses(a) {
+    if (!accessFilterOn()) return true;
+    return fittingOptions(a).length > 0;
+  }
+  function accessOk(p) {
+    if (!accessFilterOn()) return true;
+    if (p._akey === undefined) p._akey = peakKey(p);
+    return accessPasses(ACCESS[p._akey]);
+  }
+  function accessLabel() {
+    const parts = [];
+    if (hikeFilterOn()) {
+      if (maxHike === null) parts.push("hike ≥" + minHike + " mi RT");
+      else if (!minHike) parts.push("hike ≤" + maxHike + " mi RT");
+      else if (minHike === maxHike) parts.push("hike " + minHike + " mi RT");
+      else parts.push("hike " + minHike + "–" + maxHike + " mi RT");
+    }
+    if (minTrailPct > 0) parts.push("≥" + minTrailPct + "% trail");
+    return parts.join(", ");
+  }
+  function syncAccessLabels() {
+    hikeValueEl.textContent = minHike ? minHike + " mi" : "any";
+    hikeMaxValueEl.textContent = maxHike === null ? "any" : maxHike + " mi";
+    trailValueEl.textContent = minTrailPct > 0 ? "≥" + minTrailPct + "%" : "any";
+  }
+  function accessChanged() {
+    syncAccessLabels();
+    applySelection();
+    scheduleListRender();
+    if (shownRoute) renderRouteChip();
+  }
+  if (Object.keys(ACCESS).length) {
+    document.getElementById("hikePicker").hidden = false;
+    document.getElementById("hikeMaxPicker").hidden = false;
+    // the two hike sliders push each other so min never exceeds max
+    hikeSlider.addEventListener("input", () => {
+      minHike = Number(hikeSlider.value);
+      if (Number(hikeMaxSlider.value) < minHike) hikeMaxSlider.value = minHike;
+      const mx = Number(hikeMaxSlider.value);
+      maxHike = mx >= HIKE_SLIDER_MAX ? null : mx;
+      accessChanged();
+    });
+    hikeMaxSlider.addEventListener("input", () => {
+      const mx = Number(hikeMaxSlider.value);
+      if (mx < minHike) { hikeSlider.value = mx; minHike = mx; }
+      maxHike = mx >= HIKE_SLIDER_MAX ? null : mx;
+      accessChanged();
+    });
+    document.getElementById("trailPicker").hidden = false;
+    trailSlider.addEventListener("input", () => {
+      minTrailPct = Number(trailSlider.value);
+      accessChanged();
+    });
+  }
+
+  // ---- reset: every slider back to its default ("any" / dataset floor) ----
+  const DEFAULT_MIN_ELEV = minElev, DEFAULT_MIN_PROM = minProm;
+  const resetBtn = document.getElementById("resetFilters");
+  function filtersAtDefault() {
+    return minElev === DEFAULT_MIN_ELEV && minProm === DEFAULT_MIN_PROM && !accessFilterOn() && !landSel;
+  }
+  const filtersToggle = document.getElementById("filtersToggle");
+  function syncResetBtn() {
+    resetBtn.disabled = filtersAtDefault();
+    filtersToggle.textContent = filtersAtDefault() && !selected ? "Filters" : "Filters •";
+  }
+  filtersToggle.onclick = () => {
+    const open = !titlebarEl.classList.contains("filters-open");
+    titlebarEl.classList.toggle("filters-open", open);
+    filtersToggle.setAttribute("aria-expanded", String(open));
+  };
+  resetBtn.addEventListener("click", () => {
+    minElev = DEFAULT_MIN_ELEV;
+    minProm = DEFAULT_MIN_PROM;
+    elevSlider.value = minElev;
+    promSlider.value = minProm;
+    elevValueEl.textContent = formatFt(minElev);
+    promValueEl.textContent = formatProm(minProm);
+    minHike = 0; maxHike = null; minTrailPct = 0;
+    landSel = ""; landSelect.value = "";
+    trailSlider.value = 0;
+    hikeSlider.value = 0;
+    hikeMaxSlider.value = HIKE_SLIDER_MAX;
+    accessChanged();
+  });
+
+  // ---- stats panel ----
+  const statsDiv = L.control({ position: "bottomright" });
+  let statsContentEl;
+  statsDiv.onAdd = function () {
+    const div = L.DomUtil.create("div", "panel");
+    div.id = "stats";
+    div.style.margin = "0 10px 10px 0";
+    statsContentEl = div;
+    L.DomEvent.disableClickPropagation(div);
+    return div;
+  };
+  statsDiv.addTo(map);
+  ownershipControl.addTo(map); // bottom corners stack upward: the legend sits above the count
+
+  function applySelection() {
+    const parts = partsFor(selected);
+
+    markers.forEach(({ p, marker }) => {
+      const visible = p.elev >= minElev && promOk(p) && landOk(p.own) && accessOk(p);
+      const isSel = visible && matches(selected, p);
+      if (visible) marker.setStyle({ color: isSel ? SEL_COLOR : OTHER_COLOR, fillColor: isSel ? SEL_COLOR : OTHER_COLOR });
+
+      // Removals must happen before additions: both groups drive the same
+      // shared map.addLayer/removeLayer attachment on the marker itself, so
+      // adding to the new group before removing from the old one lets that
+      // later removal detach the marker from the map entirely.
+      const wantSelected = visible && isSel;
+      const wantOther = visible && !isSel;
+      if (selectedLayer.hasLayer(marker) && !wantSelected) selectedLayer.removeLayer(marker);
+      if (otherLayer.hasLayer(marker) && !wantOther) otherLayer.removeLayer(marker);
+      if (wantSelected && !selectedLayer.hasLayer(marker)) selectedLayer.addLayer(marker);
+      if (wantOther && !otherLayer.hasLayer(marker)) otherLayer.addLayer(marker);
+    });
+
+    outlineLayer.setLatLngs(parts || []);
+    raiseMyLayer();
+
+    // the one number: peaks that pass every filter (in the picked state, if any)
+    const n = peaks.reduce((c, p) => c + (matches(selected, p) && p.elev >= minElev && promOk(p) && landOk(p.own) && accessOk(p) ? 1 : 0), 0);
+    statsContentEl.textContent = "";
+    statsContentEl.appendChild(el("div", "stat-num", n.toLocaleString()));
+    statsContentEl.appendChild(el("div", "stat-label", (n === 1 ? "peak" : "peaks") + " match your filters" + (selected ? " in " + selected : "")));
+    const parts2 = ["≥" + formatFt(minElev) + " elev", "≥" + formatProm(minProm) + " prom"];
+    if (landSel) parts2.push(landSel === "public" ? "public land" : landSel === "public-civil" ? "non-military public land" :
+      landSel === PRIVATE ? "private/unknown land" : landSel + " land");
+    if (accessLabel()) parts2.push(accessLabel());
+    statsContentEl.appendChild(el("div", "stat-sub", parts2.join(" · ")));
+    syncResetBtn();
+  }
+
+  landSelect.addEventListener("change", () => {
+    landSel = landSelect.value;
+    applySelection();
+    scheduleListRender();
+  });
+  stateSelect.addEventListener("change", () => {
+    selected = stateSelect.value;
+    applySelection();
+    // go to the picked state (the easy way to reach Hawaii); "All" returns to the lower 48
+    if (selected && outlineLayer.getLatLngs().length) map.flyToBounds(outlineLayer.getBounds(), { padding: [30, 30], duration: 0.8 });
+    else if (!selected) map.flyToBounds(LOWER_48, { padding: [20, 20], duration: 0.8 });
+  });
+
+  applySelection();
+})();
+</script>
+</body>
+</html>
